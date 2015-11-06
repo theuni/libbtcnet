@@ -20,6 +20,9 @@ protected:
     CConnectionBase(const std::string& addr, unsigned short port);
     CConnectionBase();
 public:
+    CConnectionBase(const CConnectionBase& rhs);
+    CConnectionBase& operator=(const CConnectionBase rhs);
+
 
     bool IsDNS() const;
     bool GetSockAddr(sockaddr* paddr, int *addrlen) const;
@@ -67,29 +70,46 @@ private:
     Type type;
 };
 
+class CRateLimit
+{
+public:
+    CRateLimit();
+    size_t nMaxBurstRead;
+    size_t nMaxReadRate;
+    size_t nMaxBurstWrite;
+    size_t nMaxWriteRate;
+};
+
 class CConnectionOptions
 {
-    static const long nDefaultTimeout = 3;
 public:
 
     enum Family
     {
-        UNSPEC = 1 << 0,
-        IPV4 =   1 << 1,
-        IPV6 =   1 << 2
+        UNSPEC =  1 << 0,
+        IPV4   =  1 << 1,
+        IPV6   =  1 << 2,
+        ONION  =  1 << 3
+    };
+
+    enum Resolve
+    {
+        NO_RESOLVE      = 1 << 0,
+        RESOLVE_ONLY    = 1 << 1,
+        RESOLVE_CONNECT = 1 << 2,
     };
 
     CConnectionOptions();
-    int nRetries;
     bool fWhitelisted;
+    bool fOneShot;
     bool fPersistent;
-    bool fLookupOnly;
+    Resolve doResolve;
+    int nRetries;
     int nConnTimeout;
     int nRecvTimeout;
     int nSendTimeout;
     int nInitialTimeout;
     int nMaxSendBuffer;
-    int nMaxConnections;
     int nRetryInterval;
     int nMaxLookupResults;
     Family resolveFamily;
@@ -100,8 +120,8 @@ class CConnectionListener : public CConnectionBase
 public:
     CConnectionListener();
     CConnectionListener(const sockaddr *addr, int socksize, const CConnectionOptions& optsIn, const CNetworkConfig& netconfigIn);
-    CConnectionOptions GetOptions() const;
-    CNetworkConfig GetNetConfig() const;
+    const CConnectionOptions& GetOptions() const;
+    const CNetworkConfig& GetNetConfig() const;
 private:
     CConnectionOptions opts;
     CNetworkConfig netConfig;
@@ -116,9 +136,9 @@ public:
     CConnection(const std::string& addr, unsigned short port, const CConnectionOptions& opts, const CNetworkConfig& netconfig);
     CConnection(const std::string& addr, unsigned short port, const CConnectionOptions& opts, const CNetworkConfig& netconfig, const CProxy& proxy);
 
-    CProxy GetProxy() const;
-    CConnectionOptions GetOptions() const;
-    CNetworkConfig GetNetConfig() const;
+    const CProxy& GetProxy() const;
+    const CConnectionOptions& GetOptions() const;
+    const CNetworkConfig& GetNetConfig() const;
 private:
     CProxy proxy;
     CConnectionOptions opts;

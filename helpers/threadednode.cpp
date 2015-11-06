@@ -8,21 +8,31 @@
 CThreadedNode::CThreadedNode()
 : m_id(0), m_incoming(false), nSendVersion(0), nRecvVersion(0){}
 
-CThreadedNode::CThreadedNode(uint64_t id, const CNetworkConfig& netconfig, bool incoming)
-: m_id(id), m_incoming(incoming), nSendVersion(0), nRecvVersion(0), m_netconfig(netconfig){}
+CThreadedNode::CThreadedNode(uint64_t id, const CConnection& connection, bool incoming)
+: m_id(id), m_incoming(incoming), nSendVersion(connection.GetNetConfig().protocol_handshake_version), nRecvVersion(nSendVersion), m_connection(connection){}
 
 CThreadedNode::~CThreadedNode()
 {
 }
 
-void CThreadedNode::SetSendVersion(int version)
+void CThreadedNode::SetOurVersion(const CMessageVersion& version)
 {
-    nSendVersion = version;
+    m_our_version = version;
+}
+
+void CThreadedNode::SetTheirVersion(const CMessageVersion& version)
+{
+    m_their_version = version;
+}
+
+void CThreadedNode::UpgradeSendVersion()
+{
+     nSendVersion = std::min(m_our_version.nVersion, m_their_version.nVersion);
 }
 
 void CThreadedNode::UpgradeRecvVersion()
 {
-    nRecvVersion = nSendVersion;
+    nRecvVersion = std::min(m_our_version.nVersion, m_their_version.nVersion);
 }
 
 uint64_t CThreadedNode::GetId() const
@@ -45,7 +55,7 @@ bool CThreadedNode::IsIncoming() const
     return m_incoming;
 }
 
-CNetworkConfig CThreadedNode::GetNetConfig() const
+const CConnection& CThreadedNode::GetConnection() const
 {
-    return m_netconfig;
+    return m_connection;
 }

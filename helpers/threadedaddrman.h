@@ -7,18 +7,21 @@
 #define BITCOIN_NET_THREADEDADDRMAN_H
 
 #include "libbtcnet/connection.h"
+#include "threadednodeman.h"
 
 #include <list>
 
 class CThreadedAddrMan
 {
 public:
+    void Add(std::list<CConnection>& conns);
     void Add(const CConnection& conn);
-    CConnection Get();
+    bool Get(CConnection& conn);
     void AddSeed(const CConnection& conn);
 private:
     std::list<CConnection> m_connections_available;
     std::list<CConnection> m_seeds;
+    base_mutex_type m_mutex;
 };
 
 #endif // BITCOIN_NET_THREADEDADDRMAN_H

@@ -18,7 +18,8 @@
 #include <vector>
 #include <string.h>
 
-#if defined(WIN32)
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
 #include <ws2tcpip.h>
 #endif
 
@@ -50,7 +51,7 @@ void proxy_init(bufferevent *bev, const connection_data* data)
 
 bool writeproto(bufferevent *bev, const CConnection& conn)
 {
-    bool resolve = conn.IsDNS() && conn.GetOptions().fLookupOnly;
+    bool resolve = conn.IsDNS() && conn.GetOptions().doResolve == CConnectionOptions::RESOLVE_ONLY;
     std::vector<uint8_t> vSocks5;
     vSocks5.push_back(0x05);     // VER protocol version
     if(resolve)
@@ -61,14 +62,13 @@ bool writeproto(bufferevent *bev, const CConnection& conn)
         vSocks5.push_back(0x01); // CMD CONNECT
     vSocks5.push_back(0x00);     // RSV Reserved
 
-    std::string host;
     unsigned short port;
 
     if(conn.IsDNS())
     {
-        host = conn.GetHost();
+        const std::string& host = conn.GetHost();
         port = conn.GetPort();
-        if(host.size() > 255)
+        if(conn.GetHost().size() > 255)
             return false;
         vSocks5.push_back(0x03); // ATYP DOMAINNAME
         vSocks5.push_back(host.size());
@@ -158,7 +158,6 @@ void proxy_callbacks::read_final(bufferevent *bev, void *ctx)
             addr.ss_family = AF_INET;
             sockaddr_size = sizeof(sockaddr_in);
             ((sockaddr_in*)&addr)->sin_port = htons(data->conn.GetPort());
-            ((sockaddr_in*)&addr)->sin_port = 1;
             writeip = &((sockaddr_in*)&addr)->sin_addr;
             break;
         case 0x04:
@@ -190,25 +189,26 @@ void proxy_callbacks::read_final(bufferevent *bev, void *ctx)
     {
         assert(evbuffer_drain(input, 4) == 0);
         assert(evbuffer_remove(input, writeip, addrsize) == (int)addrsize);
-        assert(evbuffer_drain(input, 2) == 0);
+        // Throw this away.
+        char port[2] = {};
+        assert(evbuffer_remove(input, port, sizeof(port)) == sizeof(port));
     }
     else
     {
         assert(evbuffer_drain(input, 5 + addrsize + 2) == 0);
     }
-    if(data->conn.IsDNS() && data->conn.GetOptions().fLookupOnly)
+    if(data->conn.IsDNS() && data->conn.GetOptions().doResolve == CConnectionOptions::RESOLVE_ONLY)
     {
         if(ip)
         {
             CConnection resolved((sockaddr*)&addr, sockaddr_size, data->conn.GetOptions(), data->conn.GetNetConfig(), data->conn.GetProxy());
-            data->handler->LookupResults(data->id, std::deque<CConnection>(1, resolved));
+            std::list<CConnection> resolved_list(1, resolved);
+            data->handler->LookupResults(data->id, resolved_list);
             return;
         }
     }
     else
     {
-        CConnection resolved((sockaddr*)&addr, sizeof(addr), data->conn.GetOptions(), data->conn.GetNetConfig(), data->conn.GetProxy());
-        data->resolved_conns.push_back(resolved);
         data->handler->OutgoingConnected(data->id);
         return;
     }
@@ -246,21 +246,20 @@ void proxy_callbacks::receive_init(bufferevent *bev, void *ctx)
 {
     connection_data* data =  static_cast<connection_data*>(ctx);
     const CConnection& conn(data->conn);
-    const CProxy& proxy(conn.GetProxy());
-    const CProxyAuth& auth(proxy.GetAuth());
-    bool useAuth = auth.IsSet();
+    const CProxyAuth& auth(conn.GetProxy().GetAuth());
     char pchRet1[2];
     if (bufferevent_read(bev, pchRet1, sizeof(pchRet1)) != sizeof(pchRet1))
     {
         data->handler->OutgoingConnectionFailure(data->id);
         return;
     }
-    if (pchRet1[0] != 0x05 || ((pchRet1[1] == 0x02) != useAuth))
+    if (pchRet1[0] != 0x05)
     {
         data->handler->OutgoingConnectionFailure(data->id);
         return;
     }
 
+    bool useAuth = pchRet1[1] == 0x02;
     if (useAuth)
     {
         bufferevent_setcb(bev, proxy_callbacks::check_auth_response, NULL, proxy_callbacks::event_cb, ctx);

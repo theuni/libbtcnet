@@ -8,21 +8,31 @@
 CSimpleNode::CSimpleNode()
 : m_id(0), m_incoming(false), nSendVersion(0), nRecvVersion(0){}
 
-CSimpleNode::CSimpleNode(uint64_t id, const CNetworkConfig& config, bool incoming)
-: m_id(id), m_incoming(incoming), nSendVersion(0), nRecvVersion(0), m_netconfig(config){}
+CSimpleNode::CSimpleNode(uint64_t id, const CConnection& connection, bool incoming)
+: m_id(id), m_incoming(incoming), nSendVersion(connection.GetNetConfig().protocol_handshake_version), nRecvVersion(nSendVersion), m_connection(connection){}
 
 CSimpleNode::~CSimpleNode()
 {
 }
 
-void CSimpleNode::SetSendVersion(int version)
+void CSimpleNode::SetOurVersion(const CMessageVersion& version)
 {
-    nSendVersion = version;
+    m_our_version = version;
+}
+
+void CSimpleNode::SetTheirVersion(const CMessageVersion& version)
+{
+    m_their_version = version;
+}
+
+void CSimpleNode::UpgradeSendVersion()
+{
+     nSendVersion = std::min(m_our_version.nVersion, m_their_version.nVersion);
 }
 
 void CSimpleNode::UpgradeRecvVersion()
 {
-    nRecvVersion = nSendVersion;
+    nRecvVersion = std::min(m_our_version.nVersion, m_their_version.nVersion);
 }
 
 uint64_t CSimpleNode::GetId() const
@@ -43,4 +53,9 @@ int CSimpleNode::GetSendVersion() const
 bool CSimpleNode::IsIncoming() const
 {
     return m_incoming;
+}
+
+const CConnection& CSimpleNode::GetConnection() const
+{
+    return m_connection;
 }

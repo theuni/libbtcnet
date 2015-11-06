@@ -5,95 +5,173 @@
 
 #include "threadedconnman.h"
 #include "threadednode.h"
-//#include "net/threading.h"
 
-#include <stdio.h>
 #include <set>
 #include <list>
 
-CThreadedConnManager::CThreadedConnManager(int max_outgoing)
-: CConnectionHandler(true, max_outgoing, 0, 0, max_outgoing), m_stop(false)
+CThreadedConnManager::CThreadedConnManager(size_t max_queue_size)
+: CConnectionHandler(true), m_stop(false), m_max_queue_size(max_queue_size)
 {}
 
-bool CThreadedConnManager::OnShutdown()
+void CThreadedConnManager::Stop()
 {
     {
-        //lock_guard_type lock(m_mutex);
         lock_guard_type lock(m_mutex);
         m_stop = true;
     }
     m_condvar.notify_one();
-    return true;
+}
+
+void CThreadedConnManager::Start(int outgoing_limit, int bind_limit)
+{
+    {
+        lock_guard_type lock(m_mutex);
+        m_stop = false;
+    }
+    CConnectionHandler::Start(outgoing_limit, bind_limit);
+    while(1)
+    {
+        {
+            lock_guard_type lock(m_mutex);
+            if(m_stop)
+                break;
+        }
+        PumpEvents(true);
+    }
+    CConnectionHandler::Shutdown();
+
+    {
+        lock_guard_type lock(m_mutex);
+        m_messages.clear();
+        m_message_queue.clear();
+        m_ready_for_first_send.clear();
+    }
 }
 
 void CThreadedConnManager::Run()
 {
     std::map<uint64_t, std::vector<unsigned char> > messages;
+    std::set<uint64_t> first_send;
+    std::set<uint64_t> first_receive;
     while(true)
     {
         {
             unique_lock_type lock(m_mutex);
-            while(!m_stop && m_message_queue.empty())
+            while(!m_stop && m_message_queue.empty() && m_ready_for_first_send.empty())
                 m_condvar.wait(lock);
             if(m_stop)
                 break;
+
             for(std::map<uint64_t, CNodeMessages>::iterator i = m_message_queue.begin(); i != m_message_queue.end();)
             {
                 uint64_t id = i->first;
-                if(!i->second.empty())
+                if(i->second.size)
                 {
-                    messages[id] = i->second.front();
-                    if(i->second.size() == 1)
+                    messages[id] = i->second.messages.front();
+                    size_t msgsize = i->second.messages.front().size();
+
+                    if(i->second.size >= m_max_queue_size && i->second.size - msgsize < m_max_queue_size)
+                        UnpauseRecv(id);
+
+                    i->second.size -= msgsize;
+
+                    if(i->second.first_receive)
+                    {
+                        first_receive.insert(i->first);
+                        i->second.first_receive = false;
+                    }
+
+                    if(!i->second.size)
                     {
                         m_message_queue.erase(i++);
                     }
                     else
                     {
-                        i->second.pop_front();
+                        i->second.messages.pop_front();
                         ++i;
                     }
                 }
-/*
-                if(m_paused.count(id) && m_message_queue[id].totalsize() < 5000000)
-                {
-                    printf("resuming recv for: %lu\n", id);
-                    m_paused.erase(id);
-                    m_handler.UnpauseRecv(id);
-                }
-*/
             }
-        }
-        for(std::map<uint64_t, std::vector<unsigned char> >::iterator i = messages.begin(); i != messages.end();++i)
-        {
-            printf("processing message\n");
-            uint64_t id = i->first;
-            CThreadedNode* node = m_nodemanager.GetNode(id);
-            if(node)
+
+            if(!m_ready_for_first_send.empty())
             {
-                ProcessMessage(node, i->second);
-                m_nodemanager.Release(id);
+                m_ready_for_first_send.swap(first_send);
             }
         }
-        messages.clear();
+
+        if(!first_send.empty())
+        {
+            for(std::set<uint64_t>::const_iterator i = first_send.begin(); i != first_send.end(); ++i)
+            {
+                CThreadedNode* node = m_nodemanager.GetNode(*i);
+                if(node)
+                {
+                    OnReadyForFirstSend(node);
+                    m_nodemanager.Release(*i);
+                }
+            }
+            first_send.clear();
+        }
+
+        if(!messages.empty())
+        {
+            for(std::map<uint64_t, std::vector<unsigned char> >::iterator i = messages.begin(); i != messages.end();++i)
+            {
+                uint64_t id = i->first;
+                CThreadedNode* node = m_nodemanager.GetNode(id);
+                if(node)
+                {
+                    if(first_receive.count(i->first))
+                    {
+                        first_receive.erase(i->first);
+                        ProcessFirstMessage(node, i->second);
+                    }
+                    else
+                        ProcessMessage(node, i->second);
+
+                    m_nodemanager.Release(id);
+                }
+            }
+            messages.clear();
+        }
     }
 }
 
-bool CThreadedConnManager::OnReceiveMessages(uint64_t id, CNodeMessages msgs)
+bool CThreadedConnManager::OnReceiveMessages(uint64_t id, CNodeMessages& msgs)
 {
+    bool notify = false;
     {
         lock_guard_type lock(m_mutex);
-        m_message_queue[id].splice(m_message_queue[id].end(), msgs, msgs.begin(), msgs.end());
+        notify = m_message_queue.empty();
+        std::map<uint64_t, CNodeMessages>::iterator it = m_message_queue.find(id);
+        if(it == m_message_queue.end())
+        {
+            it = m_message_queue.insert(std::make_pair(id, msgs)).first;
+        }
+        else
+        {
+            it->second.messages.splice(it->second.messages.end(), msgs.messages, msgs.messages.begin(), msgs.messages.end());
+            it->second.size += msgs.size;
+        }
+
+        if(it->second.size < m_max_queue_size && it->second.size + msgs.size >= m_max_queue_size)
+            PauseRecv(id);
     }
-/*
-    if(!m_paused.count(id) && m_message_queue[id].totalsize() >= 5000000)
-    {
-        printf("pausing recv for: %lu\n", id);
-        m_paused.insert(id);
-        PauseRecv(id);
-    }
-*/
-    m_condvar.notify_one();
+    if(notify)
+        m_condvar.notify_one();
     return true;
+}
+
+void CThreadedConnManager::OnReadyForFirstSend(const CConnection& conn, uint64_t id)
+{
+    bool notify = false;
+    {
+        lock_guard_type lock(m_mutex);
+        notify = m_ready_for_first_send.empty();
+        m_ready_for_first_send.insert(id);
+    }
+    if(notify)
+        m_condvar.notify_one();
 }
 
 void CThreadedConnManager::AddSeed(const CConnection& conn)
@@ -101,14 +179,24 @@ void CThreadedConnManager::AddSeed(const CConnection& conn)
     m_addrmanager.AddSeed(conn);
 }
 
+void CThreadedConnManager::AddAddress(std::list<CConnection>& conns)
+{
+    m_addrmanager.Add(conns);
+}
+
 void CThreadedConnManager::AddAddress(const CConnection& conn)
 {
     m_addrmanager.Add(conn);
 }
 
-CConnection CThreadedConnManager::GetAddress()
+void CThreadedConnManager::AddListener(const CConnectionListener& conn)
 {
-    return m_addrmanager.Get();
+    m_listeners.push_back(conn);
+}
+
+bool CThreadedConnManager::GetAddress(CConnection& conn)
+{
+    return m_addrmanager.Get(conn);
 }
 
 void CThreadedConnManager::OnWriteBufferFull(uint64_t id, size_t)
@@ -129,14 +217,15 @@ void CThreadedConnManager::OnConnectionFailure(const CConnection&, const CConnec
 {
 }
 
-bool CThreadedConnManager::OnIncomingConnection(const CConnectionListener&, const CConnection&, uint64_t)
+bool CThreadedConnManager::OnIncomingConnection(const CConnectionListener&, const CConnection& resolved_conn, uint64_t id, int incount, int totalincount)
 {
-    return false;
+    m_nodemanager.AddNode(id, CThreadedNode(id, resolved_conn, true));
+    return true;
 }
 
-bool CThreadedConnManager::OnOutgoingConnection(const CConnection& conn, const CConnection&, uint64_t, uint64_t id)
+bool CThreadedConnManager::OnOutgoingConnection(const CConnection& conn, const CConnection& resolved_conn, uint64_t, uint64_t id)
 {
-    m_nodemanager.AddNode(id, CThreadedNode(id, conn.GetNetConfig(), false));
+    m_nodemanager.AddNode(id, CThreadedNode(id, resolved_conn, false));
     return true;
 }
 
@@ -148,8 +237,14 @@ void CThreadedConnManager::OnBind(const CConnectionListener&, uint64_t, uint64_t
 {
 }
 
-bool CThreadedConnManager::OnNeedIncomingListener(CConnectionListener&, uint64_t)
+bool CThreadedConnManager::OnNeedIncomingListener(CConnectionListener& listener, uint64_t)
 {
+    if(!m_listeners.empty())
+    {
+        listener = m_listeners.front();
+        m_listeners.pop_front();
+        return true;
+    }
     return false;
 }
 
@@ -161,4 +256,20 @@ void CThreadedConnManager::OnDisconnected(const CConnection&, uint64_t id, bool,
 void CThreadedConnManager::OnMalformedMessage(uint64_t id)
 {
     CloseConnection(id, true);
+}
+
+void CThreadedConnManager::OnProxyConnected(uint64_t id, const CConnection& conn)
+{
+}
+
+void CThreadedConnManager::OnProxyFailure(const CConnection& conn, const CConnection& resolved_conn, uint64_t id, bool retry, uint64_t retryid)
+{
+}
+
+void CThreadedConnManager::OnBytesRead(uint64_t id, size_t bytes, size_t total_bytes)
+{
+}
+
+void CThreadedConnManager::OnBytesWritten(uint64_t id, size_t bytes, size_t total_bytes)
+{
 }

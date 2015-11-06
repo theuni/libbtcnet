@@ -10,20 +10,21 @@ void CSimpleAddrMan::Add(const CConnection& conn)
     m_connections_available.push_back(conn);
 }
 
-CConnection CSimpleAddrMan::Get()
+bool CSimpleAddrMan::Get(CConnection& conn)
 {
-    CConnection ret;
     if(!m_connections_available.empty())
     {
-        ret = m_connections_available.front();
+        conn = m_connections_available.front();
         m_connections_available.pop_front();
+        return true;
     }
     else if(!m_seeds.empty())
     {
-        ret = m_seeds.front();
+        conn = m_seeds.front();
         m_seeds.pop_front();
+        return true;
     }
-    return ret;
+    return false;
 }
 
 void CSimpleAddrMan::AddSeed(const CConnection& conn)

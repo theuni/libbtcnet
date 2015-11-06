@@ -30,14 +30,14 @@ SAMPLE_THREADED=sample-threaded
 PROGS=$(SAMPLE_UNTHREADED) $(SAMPLE_THREADED)
 
 AR=ar
-CXX=g++
+CXX=c++
 CPPFLAGS=-Iinclude -I.
-CXXFLAGS=-O2 -g -fPIC -pedantic -Wall -Wextra
+CXXFLAGS=-O2 -g -fPIC -Wall -Wextra -Wno-unused-parameter
 LDFLAGS=-levent_core -levent_pthreads -levent_extra
 
 #Use one or the other here. If c++11, there's no need for boost.
-CPPFLAGS += -DUSE_CXX11 -std=c++11
-#BOOST_LIBS=-lboost_system -lboost_thread
+#CPPFLAGS += -DUSE_CXX11 -std=c++11
+BOOST_LIBS=-lboost_system -lboost_thread
 
 all: $(LIBS) $(PROGS)
 
@@ -54,11 +54,11 @@ $(LIBHELPERS): $(HELPER_OBJS)
 	@echo AR:  $@
 
 $(SAMPLE_UNTHREADED): $(SAMPLE_UNTHREADED_OBJS) $(LIBHELPERS) $(LIBBTCNET)
-	@$(CXX) $(CXXFLAGS) $(LDFLAGS) $(BOOST_LIBS) $^ -o $@
+	@$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(BOOST_LIBS) -o $@
 	@echo LD:  $@
 
 $(SAMPLE_THREADED): $(SAMPLE_THREADED_OBJS) $(LIBHELPERS) $(LIBBTCNET)
-	@$(CXX) $(CXXFLAGS) $(LDFLAGS) $(BOOST_LIBS) $^ -o $@
+	@$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) $(BOOST_LIBS) -o $@
 	@echo LD:  $@
 	
 clean:

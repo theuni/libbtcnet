@@ -11,15 +11,19 @@
 #include <event2/listener.h>
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
-#include <event2/thread.h>
 #include <event2/dns.h>
 #include <event2/util.h>
+
+#ifndef NO_THREADS
+#include <event2/thread.h>
+#endif
 
 #include <assert.h>
 #include <string.h>
 #include <limits>
 
 #if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
 #include <ws2tcpip.h>
 #else
 #include <netinet/tcp.h>
@@ -34,19 +38,18 @@
 
 namespace {
 
-void setup_threads()
+static void setup_threads()
 {
-#ifndef NO_THREADS
-#if defined(_EVENT_DISABLE_THREAD_SUPPORT)
-        throw std::runtime_error("Thread support requested but not compiled in.");
-#endif
-#ifdef _WIN32
+#if !defined(NO_THREADS)
+#if defined(EVTHREAD_USE_WINDOWS_THREADS_IMPLEMENTED)
     evthread_use_windows_threads();
-#endif
-#ifdef _EVENT_HAVE_PTHREADS
+    return;
+#elif defined(EVTHREAD_USE_PTHREADS_IMPLEMENTED)
     evthread_use_pthreads();
+    return;
 #endif
 #endif
+    throw std::runtime_error("Thread support requested but not compiled in.");
 }
 
 }
@@ -95,6 +98,8 @@ struct connection_callbacks
         {
             if(data->conn.GetProxy().IsSet())
             {
+                data->proxy_connected = true;
+                data->handler->ProxyConnected(data);
                 if(data->conn.GetProxy().GetType() == CProxy::SOCKS5)
                     proxy_init(bev, data);
             }
@@ -127,72 +132,209 @@ struct connection_callbacks
 
 };
 
-CConnectionHandler::CConnectionHandler(bool enable_threading, int outgoing_limit, int incoming_limit, int bind_limit, int total_limit)
+CConnectionHandler::CConnectionHandler(bool enable_threading)
 : m_connected_index(0)
 , m_bind_index(0)
 , m_bind_attempt_index(0)
 , m_outgoing_attempt_index(0)
+, m_bytes_read(0)
+, m_bytes_written(0)
 , m_outgoing_conn_count(0)
 , m_incoming_conn_count(0)
-, m_outgoing_conn_limit(outgoing_limit)
-, m_incoming_conn_limit(incoming_limit)
-, m_total_conn_limit(total_limit)
-, m_bind_limit(bind_limit)
+, m_outgoing_conn_limit(0)
+, m_bind_limit(0)
 , m_enable_threading(enable_threading)
 , m_shutdown(false)
 , m_conn_mutex(NULL)
+, m_rate_mutex(NULL)
+, m_main_thread(NULL)
+, m_incoming_rate_cfg(NULL)
+, m_outgoing_rate_cfg(NULL)
+, m_incoming_rate_limit(NULL)
+, m_outgoing_rate_limit(NULL)
+, m_event_base(NULL)
+, m_dns_base(NULL)
+, m_request_event(NULL)
 {
     if(m_enable_threading)
         setup_threads();
-    event_config* cfg = event_config_new();
-    event_config_set_flag(cfg, EVENT_BASE_FLAG_EPOLL_USE_CHANGELIST);
-    m_event_base = event_base_new_with_config(cfg);
-    event_config_free(cfg);
-#ifndef _EVENT_DISABLE_THREAD_SUPPORT
-    if(m_enable_threading)
-        evthread_make_base_notifiable(m_event_base);
-#endif
-    m_dns_base = evdns_base_new(m_event_base, 1);
 
-
-  m_incoming_rate_cfg = ev_token_bucket_cfg_new(EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, NULL);
-  m_outgoing_rate_cfg = ev_token_bucket_cfg_new(EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, NULL);
-  m_incoming_rate_limit = bufferevent_rate_limit_group_new(m_event_base, m_incoming_rate_cfg);
-  m_outgoing_rate_limit = bufferevent_rate_limit_group_new(m_event_base, m_outgoing_rate_cfg);
 #ifndef NO_THREADS
-  m_thread = pthread_self();
-  m_conn_mutex = new mutex_type;
+    m_main_thread = new thread_holder;
+    m_conn_mutex = new mutex_holder;
+    m_rate_mutex = new mutex_holder;
+    if(m_enable_threading)
+        m_main_thread->m_thread = thread_get_id();
 #endif
 }
 
 CConnectionHandler::~CConnectionHandler()
 {
-    for(std::map<uint64_t, listener_data>::iterator it(m_binds.begin()); it != m_binds.end(); ++it)
-        evconnlistener_free(it->second.listener);
+    Shutdown();
+
+#ifndef NO_THREADS
+    if(m_conn_mutex)
+    {
+        delete m_conn_mutex;
+        m_conn_mutex = NULL;
+    }
+    if(m_rate_mutex)
+    {
+        delete m_rate_mutex;
+        m_rate_mutex = NULL;
+    }
+    if(m_main_thread)
+    {
+        delete m_main_thread;
+        m_main_thread = NULL;
+    }
+#endif
+}
+
+void CConnectionHandler::Start(int outgoing_limit, int bind_limit)
+{
+    m_shutdown = false;
+
+    if(m_enable_threading)
+        m_main_thread->m_thread = thread_get_id();
+
+    assert(m_outgoing_conn_count == 0);
+    assert(m_incoming_conn_count == 0);
+
+    m_outgoing_conn_limit = outgoing_limit;
+    m_bind_limit = bind_limit;
+
+    event_config* cfg = event_config_new();
+    event_config_set_flag(cfg, EVENT_BASE_FLAG_EPOLL_USE_CHANGELIST);
+    m_event_base = event_base_new_with_config(cfg);
+    event_config_free(cfg);
+#if !defined(_EVENT_DISABLE_THREAD_SUPPORT) && !defined(NO_THREADS)
+    if(m_enable_threading)
+        evthread_make_base_notifiable(m_event_base);
+#endif
+    m_dns_base = evdns_base_new(m_event_base, 1);
+    evdns_base_set_option(m_dns_base, "randomize-case", "0");
+
+    {
+        optional_lock(m_rate_mutex, m_enable_threading);
+
+        if(!m_incoming_rate_cfg)
+            m_incoming_rate_cfg = ev_token_bucket_cfg_new(EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, NULL);
+        m_incoming_rate_limit = bufferevent_rate_limit_group_new(m_event_base, m_incoming_rate_cfg);
+
+        if(!m_outgoing_rate_cfg)
+            m_outgoing_rate_cfg = ev_token_bucket_cfg_new(EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, NULL);
+        m_outgoing_rate_limit = bufferevent_rate_limit_group_new(m_event_base, m_outgoing_rate_cfg);
+    }
+
+    m_request_event = event_new(m_event_base, -1, EV_PERSIST, timer_callbacks::request_connections, this);
+
+    timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 500000;
+    event_add(m_request_event, &timeout);
+
+    ActivateConnectionsTimer();
+}
+
+void CConnectionHandler::ActivateConnectionsTimer()
+{
+    if(!m_shutdown && m_request_event)
+        event_active(m_request_event, EV_TIMEOUT, 0);
+}
+
+void CConnectionHandler::Shutdown()
+{
+    assert(IsEventThread());
+    m_shutdown = true;
+
+    if(m_request_event)
+    {
+        event_free(m_request_event);
+        m_request_event = NULL;
+    }
+
+    if(m_dns_base)
+    {
+        evdns_base_free(m_dns_base, 1);
+        m_dns_base = NULL;
+    }
+
+    PumpEvents(false);
+
     for(std::map<uint64_t, connection_data>::iterator it(m_outgoing_attempts.begin()); it != m_outgoing_attempts.end(); ++it)
     {
         if(it->second.ev)
             event_free(it->second.ev);
         if(it->second.bev)
+        {
+            bufferevent_disable(it->second.bev, EV_READ | EV_WRITE);
+            bufferevent_setcb(it->second.bev, NULL, NULL, NULL, NULL);
+            OnConnectionFailure(it->second.conn, it->second.conn, it->second.id, false, 0);
             bufferevent_free(it->second.bev);
+        }
     }
+
     for(CConnectionHandler::connections_list_type::iterator it(m_connected.begin()); it != m_connected.end(); ++it)
     {
-        if(it->second.bev)
-            bufferevent_free(it->second.bev);
-        m_outgoing_conn_count--;
+        bool incoming = it->second.incoming;
+        bufferevent* bev = it->second.bev;
+        if(bev)
+        {
+            bufferevent_disable(bev, EV_READ | EV_WRITE);
+            bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+            bufferevent_set_rate_limit(bev, NULL);
+            bufferevent_remove_from_rate_limit_group(bev);
+            OnDisconnected(it->second.conn, it->second.id, false, 0);
+            bufferevent_free(bev);
+        }
+        if(it->second.rate_cfg)
+            ev_token_bucket_cfg_free(it->second.rate_cfg);
+        if(it->second.ev)
+            event_free(it->second.ev);
+        if(incoming)
+            m_incoming_conn_count--;
+        else
+            m_outgoing_conn_count--;
     }
-    bufferevent_rate_limit_group_free(m_outgoing_rate_limit);
-    bufferevent_rate_limit_group_free(m_incoming_rate_limit);
-    ev_token_bucket_cfg_free(m_incoming_rate_cfg);
-    ev_token_bucket_cfg_free(m_outgoing_rate_cfg);
 
-#ifndef NO_THREADS
-    delete m_conn_mutex;
-#endif
+    for(std::map<uint64_t, listener_data>::iterator it(m_binds.begin()); it != m_binds.end(); ++it)
+        evconnlistener_free(it->second.listener);
 
-    evdns_base_free(m_dns_base, 0);
-    event_base_free(m_event_base);
+    PumpEvents(false);
+
+    if(m_outgoing_rate_limit)
+    {
+        bufferevent_rate_limit_group_free(m_outgoing_rate_limit);
+        m_outgoing_rate_limit = NULL;
+    }
+    if(m_incoming_rate_limit)
+    {
+        bufferevent_rate_limit_group_free(m_incoming_rate_limit);
+        m_incoming_rate_limit = NULL;
+    }
+    if(m_incoming_rate_cfg)
+    {
+        ev_token_bucket_cfg_free(m_incoming_rate_cfg);
+        m_incoming_rate_cfg = NULL;
+    }
+    if(m_outgoing_rate_cfg)
+    {
+        ev_token_bucket_cfg_free(m_outgoing_rate_cfg);
+        m_outgoing_rate_cfg = NULL;
+    }
+
+    if(m_event_base)
+    {
+        event_base_free(m_event_base);
+        m_event_base = NULL;
+    }
+
+    m_bind_attempts.clear();
+    m_binds.clear();
+    m_outgoing_attempts.clear();
+    m_connected.clear();
+
 }
 
 bool CConnectionHandler::IsEventThread() const
@@ -200,7 +342,7 @@ bool CConnectionHandler::IsEventThread() const
 #ifndef NO_THREADS
     if(!m_enable_threading)
         return true;
-    return pthread_equal(pthread_self(), m_thread);
+    return thread_equal(m_main_thread);
 #endif
     return true;
 }
@@ -223,24 +365,7 @@ void CConnectionHandler::IncomingConnected(listener_data* listen, const CConnect
 {
     assert(IsEventThread());
 
-    int max_incoming = listen->conn.GetOptions().nMaxConnections;
-    if (max_incoming >= 0 && listen->incoming_connections + 1 >= max_incoming)
-    {
-        evconnlistener_disable(listen->listener);
-        if(listen->incoming_connections + 1 > max_incoming)
-            return;
-    }
-    if(m_incoming_conn_count + 1 >= m_incoming_conn_limit)
-    {
-        evconnlistener_disable(listen->listener);
-        if(m_incoming_conn_count + 1 > m_incoming_conn_limit)
-            return;
-    }
-
-    if(m_outgoing_conn_count + m_incoming_conn_count + 1 > m_total_conn_limit)
-        return;
-
-    bufferevent_options bev_opts = BEV_OPT_CLOSE_ON_FREE;
+    bufferevent_options bev_opts = bufferevent_options(BEV_OPT_CLOSE_ON_FREE);
     if(m_enable_threading)
         bev_opts = bufferevent_options(bev_opts | BEV_OPT_THREADSAFE);
     bufferevent *bev = bufferevent_socket_new(m_event_base, sock.fd, bev_opts);
@@ -251,20 +376,12 @@ void CConnectionHandler::IncomingConnected(listener_data* listen, const CConnect
     bufferevent_disable(bev, EV_READ | EV_WRITE);
 
     uint64_t id = m_connected_index++;
-    if(!OnIncomingConnection(listen->conn, conn, id))
+    if(!OnIncomingConnection(listen->conn, conn, id, listen->incoming_connections+1, m_incoming_conn_count + 1))
     {
         bufferevent_free(bev);
         return;
     }
-
-    timeval initialTimeout;
-    initialTimeout.tv_sec = listen->conn.GetOptions().nInitialTimeout;
-    initialTimeout.tv_usec = 0;
-
-    bufferevent_set_timeouts(bev, &initialTimeout, &initialTimeout);
-
-    bufferevent_add_to_rate_limit_group(bev, m_incoming_rate_limit);
-
+    listen->incoming_connections++;
     m_incoming_conn_count++;
 
     connection_data data;
@@ -283,27 +400,59 @@ void CConnectionHandler::IncomingConnected(listener_data* listen, const CConnect
 
 void CConnectionHandler::AddConnection(const connection_data& data)
 {
-    connection_data* dataptr = NULL;
     bufferevent* bev = data.bev;
-    const std::pair<uint64_t, connection_data>& datapair = std::make_pair(data.id, data);
-    {
-        optional_lock(m_conn_mutex, m_enable_threading);
-        dataptr = &m_connected.insert(datapair).first->second;
-        bufferevent_lock(bev);
-    }
+    const CConnectionOptions& opts = data.conn.GetOptions();
 
     timeval initialTimeout;
-    initialTimeout.tv_sec = data.conn.GetOptions().nInitialTimeout;
+    initialTimeout.tv_sec = opts.nInitialTimeout;
     initialTimeout.tv_usec = 0;
 
     bufferevent_set_timeouts(bev, &initialTimeout, &initialTimeout);
 
-    bufferevent_setwatermark(bev, EV_READ, 20, 0);
-    bufferevent_setwatermark(bev, EV_WRITE, data.conn.GetOptions().nMaxSendBuffer, 0);
+    {
+        optional_lock(m_rate_mutex, m_enable_threading);
+        if(data.incoming && m_incoming_rate_limit && m_incoming_rate_cfg)
+            bufferevent_add_to_rate_limit_group(bev, m_incoming_rate_limit);
+        else if (m_outgoing_rate_limit && m_outgoing_rate_cfg)
+        {
+            bufferevent_add_to_rate_limit_group(bev, m_outgoing_rate_limit);
+        }
+    }
 
+    evbuffer* input = bufferevent_get_input(bev);
+    evbuffer* output = bufferevent_get_output(bev);
+
+    bufferevent_setwatermark(bev, EV_READ, 20, 0);
+    bufferevent_setwatermark(bev, EV_WRITE, opts.nMaxSendBuffer, 0);
+
+    connection_data* dataptr = NULL;
+    const std::pair<uint64_t, connection_data>& datapair = std::make_pair(data.id, data);
+    {
+        optional_lock(m_conn_mutex, m_enable_threading);
+        bufferevent_lock(bev);
+        dataptr = &m_connected.insert(datapair).first->second;
+    }
     bufferevent_setcb(bev, bev_callbacks::first_recv_cb, bev_callbacks::first_send_cb, bev_callbacks::event_cb, dataptr);
+    evbuffer_add_cb(input, buf_callbacks::read_data, dataptr);
+    evbuffer_add_cb(output, buf_callbacks::wrote_data, dataptr);
     bufferevent_enable(bev, EV_READ | EV_WRITE);
     bufferevent_unlock(bev);
+}
+
+void CConnectionHandler::BytesRead(connection_data* data, size_t prev_size, size_t bytes)
+{
+    assert(IsEventThread());
+    data->bytes_read += bytes;
+    m_bytes_read += bytes;
+    OnBytesRead(data->id, bytes, m_bytes_read);
+}
+
+void CConnectionHandler::BytesWritten(connection_data* data, size_t prev_size, size_t bytes)
+{
+    assert(IsEventThread());
+    data->bytes_written += bytes;
+    m_bytes_written += bytes;
+    OnBytesWritten(data->id, bytes, m_bytes_read);
 }
 
 void CConnectionHandler::DeleteListener(listener_data* data)
@@ -319,6 +468,11 @@ void CConnectionHandler::DeleteListener(listener_data* data)
         data->ev = NULL;
     }
     m_binds.erase(data->id);
+}
+
+void CConnectionHandler::ProxyConnected(connection_data* data)
+{
+    OnProxyConnected(data->id, data->conn);
 }
 
 void CConnectionHandler::OutgoingConnected(uint64_t attemptId)
@@ -338,6 +492,8 @@ void CConnectionHandler::OutgoingConnected(uint64_t attemptId)
         resolved = data.resolved_conns.front();
         data.resolved_conns.pop_front();
     }
+    else
+        resolved = data.conn;
     data.id = m_connected_index++;
     if(!OnOutgoingConnection(data.conn, resolved, attemptId, data.id))
     {
@@ -347,9 +503,6 @@ void CConnectionHandler::OutgoingConnected(uint64_t attemptId)
 
     m_outgoing_attempts.erase(attempt_it);
     m_outgoing_conn_count++;
-
-    bufferevent* bev = data.bev;
-    bufferevent_add_to_rate_limit_group(bev, m_outgoing_rate_limit);
 
     AddConnection(data);
 
@@ -378,22 +531,26 @@ void CConnectionHandler::OutgoingConnectionFailure(uint64_t id)
         old_data_copy.resolved_conns.pop_front();
     }
 
-    bool should_retry_dns = !old_data_copy.resolved_conns.empty();
-
-    if(old_data_copy.retry != 0 || should_retry_dns)
+    connection_data* newdata = NULL;
+    bool should_retry = !m_shutdown && (!old_data_copy.resolved_conns.empty() || old_data_copy.retry != 0);
+    if(should_retry)
     {
-        connection_data* newdata = NULL;
         newdata = CreateRetry(old_data_copy);
         if(newdata->retry > 0)
             newdata->retry--;
-        OnConnectionFailure(old_data_copy.conn, failedConn, id, true, newdata->id);
-        AddTimedConnect(newdata, newdata->conn.GetOptions().nRetryInterval);
     }
+
+    if(old_data_copy.conn.GetProxy().IsSet() && !old_data_copy.proxy_connected)
+        OnProxyFailure(old_data_copy.conn, failedConn, id, should_retry, should_retry ? newdata->id : 0);
+    else if(old_data_copy.conn.IsDNS() && failedConn.GetOptions().doResolve == CConnectionOptions::RESOLVE_ONLY)
+        OnDnsFailure(old_data_copy.conn);
     else
-    {
-        OnConnectionFailure(old_data_copy.conn, failedConn, id, false, 0);
-        RequestOutgoing();
-    }
+        OnConnectionFailure(old_data_copy.conn, failedConn, id, should_retry, should_retry ? newdata->id : 0);
+
+    if(should_retry)
+        AddTimedConnect(newdata, newdata->conn.GetOptions().nRetryInterval);
+    else
+        ActivateConnectionsTimer();
 }
 
 void CConnectionHandler::HandleDisconnected(const connection_data& old_data_copy)
@@ -406,14 +563,12 @@ void CConnectionHandler::HandleDisconnected(const connection_data& old_data_copy
         if(it != m_binds.end())
         {
             it->second.incoming_connections--;
-            assert(it->second.listener);
-            evconnlistener_enable(it->second.listener);
         }
         m_incoming_conn_count--;
     }
     else
     {
-        if(persistent)
+        if(persistent && !m_shutdown)
         {
             connection_data* newdata = CreateRetry(old_data_copy);
             newid = newdata->id;
@@ -423,14 +578,16 @@ void CConnectionHandler::HandleDisconnected(const connection_data& old_data_copy
         m_outgoing_conn_count--;
     }
     OnDisconnected(old_data_copy.conn, old_data_copy.id, persistent, newid);
-    if(!persistent)
-        RequestOutgoing();
+    if(!persistent && !old_data_copy.incoming && !m_shutdown)
+        ActivateConnectionsTimer();
 }
 
 void CConnectionHandler::AddTimedConnect(connection_data* data, int seconds)
 {
     assert(IsEventThread());
     assert(!data->ev);
+    if(m_shutdown)
+        return;
     data->ev = event_new(m_event_base, -1, 0, timer_callbacks::retry_outgoing, data);
     timeval timeout;
     timeout.tv_sec = seconds;
@@ -459,11 +616,11 @@ connection_data* CConnectionHandler::CreateRetry(const connection_data& olddata)
     return data;
 }
 
-void CConnectionHandler::LookupResults(uint64_t id, const std::deque<CConnection>& results)
+void CConnectionHandler::LookupResults(uint64_t id, std::list<CConnection>& results)
 {
     assert(IsEventThread());
     connection_data& data = m_outgoing_attempts[id];
-    if(data.conn.GetOptions().fLookupOnly)
+    if(data.conn.GetOptions().doResolve == CConnectionOptions::RESOLVE_ONLY)
     {
         OnDnsResponse(data.conn, id, results);
         if(data.bev)
@@ -472,7 +629,7 @@ void CConnectionHandler::LookupResults(uint64_t id, const std::deque<CConnection
             data.bev = NULL;
         }
         m_outgoing_attempts.erase(id);
-        RequestOutgoing();
+        ActivateConnectionsTimer();
     }
     else
     {
@@ -499,12 +656,14 @@ bool CConnectionHandler::ConnectOutgoing(connection_data* data)
     if(baseConn.IsDNS() && data->resolved_conns.empty())
     {
         unsigned short port = baseConn.GetPort();
-        char portstr[6] = {};
+        char portstr[NI_MAXSERV] = {};
         evutil_snprintf(portstr, sizeof(portstr), "%hu", port);
         evutil_addrinfo hints;
         memset(&hints, 0, sizeof(hints));
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_protocol = IPPROTO_TCP;
+        hints.ai_flags = EVUTIL_AI_NUMERICSERV;
+        hints.ai_flags |= opts.doResolve == CConnectionOptions::NO_RESOLVE ? EVUTIL_AI_NUMERICHOST : EVUTIL_AI_ADDRCONFIG;
         if(opts.resolveFamily == CConnectionOptions::IPV4)
             hints.ai_family = AF_INET;
         else if(opts.resolveFamily == CConnectionOptions::IPV6)
@@ -571,21 +730,25 @@ bool CConnectionHandler::ConnectOutgoing(connection_data* data)
 void CConnectionHandler::DisconnectNow(uint64_t id)
 {
     connection_data old_data_copy;
-    bufferevent* bev;
     {
         optional_lock(m_conn_mutex, m_enable_threading);
         connections_list_type::iterator it = m_connected.find(id);
         if(it == m_connected.end())
             return;
         old_data_copy = it->second;
-        bev = old_data_copy.bev;
         m_connected.erase(it);
-        bufferevent_lock(bev);
+        bufferevent_lock(old_data_copy.bev);
     }
+    bufferevent* bev = old_data_copy.bev;
     bufferevent_disable(bev, EV_READ | EV_WRITE);
     bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+    bufferevent_set_rate_limit(bev, NULL);
+    bufferevent_remove_from_rate_limit_group(bev);
     bufferevent_free(bev);
     bufferevent_unlock(bev);
+    if(old_data_copy.rate_cfg)
+        ev_token_bucket_cfg_free(old_data_copy.rate_cfg);
+
     HandleDisconnected(old_data_copy);
 }
 
@@ -607,6 +770,7 @@ void CConnectionHandler::DisconnectAfterWrite(uint64_t id)
         const evbuffer *output = bufferevent_get_output(bev);
         if (!evbuffer_get_length(output))
         {
+            data_ptr->bev = NULL;
             m_connected.erase(it);
             erased = true;
         }
@@ -615,8 +779,13 @@ void CConnectionHandler::DisconnectAfterWrite(uint64_t id)
     {
         bufferevent_disable(bev, EV_READ | EV_WRITE);
         bufferevent_setcb(bev, NULL, NULL, NULL, NULL);
+        bufferevent_set_rate_limit(bev, NULL);
+        bufferevent_remove_from_rate_limit_group(bev);
         bufferevent_free(bev);
         bufferevent_unlock(bev);
+        if(old_data_copy.rate_cfg)
+            ev_token_bucket_cfg_free(old_data_copy.rate_cfg);
+
         HandleDisconnected(old_data_copy);
     }
     else
@@ -716,50 +885,34 @@ void CConnectionHandler::RequestBind()
 void CConnectionHandler::RequestOutgoing()
 {
     assert(IsEventThread());
-    int total_slots = (int)m_outgoing_attempts.size() + m_outgoing_conn_count + m_incoming_conn_count;
-    if(m_total_conn_limit > 0 && total_slots >= m_total_conn_limit)
+    if(m_shutdown)
         return;
-
-    if(m_outgoing_conn_limit < 0 || (m_outgoing_attempts.size() + m_outgoing_conn_count < (uint64_t)m_outgoing_conn_limit))
+    int need = m_outgoing_conn_limit < 0 ? 8 : m_outgoing_conn_limit - m_outgoing_conn_count - (int)m_outgoing_attempts.size();
+    if(need > 0)
     {
-        CConnection conn;
-        if(OnNeedOutgoingConnection(conn, m_outgoing_attempt_index) && conn.IsSet())
+        std::vector<CConnection> conns;
+        if(OnNeedOutgoingConnections(conns, need))
         {
-            connection_data* data = CreateOutgoing(conn);
-            ConnectOutgoing(data);
+            for(std::vector<CConnection>::const_iterator it = conns.begin(); it != conns.end(); ++it)
+            {
+                if(it->IsSet())
+                {
+                    connection_data* data = CreateOutgoing(*it);
+                    ConnectOutgoing(data);
+                    if(!--need)
+                        break;
+                }
+            }
         }
     }
 }
 
-void CConnectionHandler::Start()
+int CConnectionHandler::PumpEvents(bool block)
 {
     assert(IsEventThread());
-
-    event* ev = event_new(m_event_base, -1, EV_PERSIST, timer_callbacks::request_connections, this);
-    timeval timeout;
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
-    event_add(ev, &timeout);
-    event_active(ev, 0, 0);
-
-    event_base_dispatch(m_event_base);
-
-    event_free(ev);
-    {
-        optional_lock(m_conn_mutex, m_enable_threading);
-        m_shutdown = true;
-    }
-    OnShutdown();
-}
-
-void CConnectionHandler::ReadyForWrite(connection_data*)
-{
-    assert(IsEventThread());
-}
-
-void CConnectionHandler::Stop()
-{
-    event_base_loopexit(m_event_base, NULL);
+    if(!m_event_base)
+        return false;
+    return event_base_loop(m_event_base, block ? EVLOOP_ONCE : EVLOOP_NONBLOCK);
 }
 
 void CConnectionHandler::CloseConnection(uint64_t id, bool immediately)
@@ -776,6 +929,10 @@ void CConnectionHandler::CloseConnection(uint64_t id, bool immediately)
 void CConnectionHandler::ReceiveMessages(connection_data* data)
 {
     assert(IsEventThread());
+
+    if(m_shutdown)
+        return;
+
     assert(data);
     assert(data->bev);
     evbuffer* input = bufferevent_get_input(data->bev);
@@ -784,6 +941,8 @@ void CConnectionHandler::ReceiveMessages(connection_data* data)
     bool fBadMsgStart = false;
     uint32_t msgsize = 0;
     CNodeMessages msgs;
+    msgs.first_receive = false;
+    msgs.size = 0;
     const CNetworkConfig& netconfig = data->conn.GetNetConfig();
     do
     {
@@ -802,8 +961,14 @@ void CConnectionHandler::ReceiveMessages(connection_data* data)
         if(msgsize && fComplete)
         {
             std::vector<unsigned char> msg(msgsize);
-            evbuffer_remove(input, &msg[0], msgsize);
-            msgs.push_back(msg);
+            assert(evbuffer_remove(input, &msg[0], msgsize) == (int)msgsize);
+            msgs.messages.push_back(msg);
+            msgs.size += msgsize;
+            if(!data->received_first_message)
+            {
+                msgs.first_receive = true;
+                data->received_first_message = true;
+            }
         }
     }
     while(fComplete);
@@ -813,7 +978,7 @@ void CConnectionHandler::ReceiveMessages(connection_data* data)
     else
         bufferevent_setwatermark(data->bev, EV_READ, 20, 0);
 
-    if(!msgs.empty())
+    if(msgs.size)
         OnReceiveMessages(data->id, msgs);
 }
 
@@ -882,9 +1047,9 @@ bool CConnectionHandler::SendMsg(uint64_t id, const unsigned char* data, size_t 
         bufferevent_lock(bev);
     }
 
-    const evbuffer *output = bufferevent_get_output(bev);
+    evbuffer *output = bufferevent_get_output(bev);
     size_t oldsize = evbuffer_get_length(output);
-    assert(bufferevent_write(bev, data, size) == 0);
+    assert(evbuffer_add(output, data, size) == 0);
     size_t newsize = evbuffer_get_length(output);
     if(oldsize < max_write_buffer && newsize >= max_write_buffer)
     {
@@ -895,4 +1060,53 @@ bool CConnectionHandler::SendMsg(uint64_t id, const unsigned char* data, size_t 
     return true;
 
 }
+
+bool CConnectionHandler::SetRateLimit(uint64_t id, const CRateLimit& limit)
+{
+    ev_token_bucket_cfg* cfg = ev_token_bucket_cfg_new(limit.nMaxReadRate, limit.nMaxBurstRead, limit.nMaxWriteRate, limit.nMaxBurstWrite, NULL);
+    ev_token_bucket_cfg* old_cfg = NULL;
+    bufferevent* bev = NULL;
+    connection_data* data_ptr = NULL;
+    {
+        optional_lock(m_conn_mutex, m_enable_threading);
+        connections_list_type::iterator conn_it = m_connected.find(id);
+        if(conn_it == m_connected.end())
+            return false;
+        data_ptr = &conn_it->second;
+        if(data_ptr->disconnecting)
+            return false;
+        bev = data_ptr->bev;
+        old_cfg = data_ptr->rate_cfg;
+        data_ptr->rate_cfg = cfg;
+        bufferevent_lock(bev);
+    }
+    bufferevent_set_rate_limit(bev, data_ptr->rate_cfg);
+    bufferevent_unlock(bev);
+    if(old_cfg != NULL)
+        ev_token_bucket_cfg_free(old_cfg);
+    return true;
+}
+
+void CConnectionHandler::SetGroupRateLimit(const CRateLimit& limit, ev_token_bucket_cfg*& cfg, bufferevent_rate_limit_group* group)
+{
+    ev_token_bucket_cfg* temp_cfg = ev_token_bucket_cfg_new(limit.nMaxReadRate, limit.nMaxBurstRead, limit.nMaxWriteRate, limit.nMaxBurstWrite, NULL);
+    if(group)
+        assert(bufferevent_rate_limit_group_set_cfg(group, temp_cfg) == 0);
+    if(cfg)
+        ev_token_bucket_cfg_free(cfg);
+    cfg = temp_cfg;
+}
+
+void CConnectionHandler::SetIncomingRateLimit(const CRateLimit& limit)
+{
+    optional_lock(m_rate_mutex, m_enable_threading);
+    SetGroupRateLimit(limit, m_incoming_rate_cfg, m_incoming_rate_limit);
+}
+
+void CConnectionHandler::SetOutgoingRateLimit(const CRateLimit& limit)
+{
+    optional_lock(m_rate_mutex, m_enable_threading);
+    SetGroupRateLimit(limit, m_outgoing_rate_cfg, m_outgoing_rate_limit);
+}
+
 

@@ -20,6 +20,12 @@ struct bev_callbacks
     static void first_recv_cb(bufferevent *bev, void *ctx);
 };
 
+struct buf_callbacks
+{
+    static void read_data(struct evbuffer *buffer, const struct evbuffer_cb_info *info, void *ctx);
+    static void wrote_data(struct evbuffer *buffer, const struct evbuffer_cb_info *info, void *ctx);
+};
+
 struct dns_callbacks
 {
     static void dns_callback(int result, struct evutil_addrinfo *res, void *ctx);

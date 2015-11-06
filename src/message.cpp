@@ -10,9 +10,9 @@
 
 namespace {
 
-static inline uint32_t get_message_length(const unsigned char* buf)
+static inline ev_int64_t get_message_length(const unsigned char* buf)
 {
-#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__) && 0
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
     return *reinterpret_cast<const uint32_t*>(buf);
 #else
     return buf[0] | \
@@ -40,27 +40,25 @@ uint32_t first_complete_message_size(const CNetworkConfig& config, evbuffer *inp
     if (evbuffer_peek(input, size_needed, NULL, &v, 1) == 1)
     {
         const unsigned char* ptr = static_cast<const unsigned char*>(v.iov_base);
-        if(memcmp(ptr, &config.message_start[0], config.message_start.size()) == 0)
-            nMessageSize = get_message_length(ptr + config.header_msg_size_offset) + config.header_size;
-        else
+        if(!config.message_start.empty() && memcmp(ptr, &config.message_start[0], config.message_start.size()) != 0)
         {
             fBadMsgStart = true;
             return 0;
         }
+        else
+            nMessageSize = get_message_length(ptr + config.header_msg_size_offset) + config.header_size;
     }
     else
     {
         std::vector<unsigned char> partial_header(size_needed);
         assert(evbuffer_copyout(input, &partial_header[0], size_needed) == size_needed);
-        if(memcmp(&partial_header[0], &config.message_start[0], config.message_start.size()) == 0)
-        {
-            nMessageSize = get_message_length(&partial_header[0] + header_size_offset) + header_total_size;
-        }
-        else
+        if(!config.message_start.empty() && memcmp(&partial_header[0], &config.message_start[0], config.message_start.size()) != 0)
         {
             fBadMsgStart = true;
             return 0;
         }
+        else
+            nMessageSize = get_message_length(&partial_header[0] + header_size_offset) + header_total_size;
     }
     if(nTotal >= nMessageSize)
         fComplete = true;

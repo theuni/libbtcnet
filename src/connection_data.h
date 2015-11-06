@@ -9,7 +9,7 @@
 #include "libbtcnet/connection.h"
 
 #include <stdint.h>
-#include <deque>
+#include <list>
 
 /* TODO: This needs tons of cleanup and documentation */
 
@@ -17,6 +17,7 @@ class CConnectionHandler;
 struct bufferevent;
 struct event;
 struct evconnlistener;
+struct ev_token_bucket_cfg;
 
 struct listener_data
 {
@@ -48,7 +49,13 @@ struct connection_data
     , retry(0)
     , pause_recv(false)
     , id(0)
-    , listen_conn(0){}
+    , listen_conn(0)
+    , received_first_message(false)
+    , rate_cfg(NULL)
+    , proxy_connected(false)
+    , bytes_written(0)
+    , bytes_read(0)
+    {}
 
     CConnectionHandler* handler;
     bufferevent* bev;
@@ -60,7 +67,12 @@ struct connection_data
     int pause_recv;
     uint64_t id;
     uint64_t listen_conn;
-    std::deque<CConnection> resolved_conns;
+    std::list<CConnection> resolved_conns;
+    bool received_first_message;
+    ev_token_bucket_cfg* rate_cfg;
+    bool proxy_connected;
+    size_t bytes_written;
+    size_t bytes_read;
 };
 
 #endif // BITCOIN_NET_CONNECTION_DATA_H

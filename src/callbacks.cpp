@@ -11,6 +11,7 @@
 #include <assert.h>
 
 #if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
 #include <ws2tcpip.h>
 #endif
 
@@ -71,7 +72,7 @@ void bev_callbacks::first_recv_cb(bufferevent *bev, void *ctx)
     connection_data* data = static_cast<connection_data*>(ctx);
     bufferevent_setcb(bev, read_cb, NULL, event_cb, data);
     set_default_timeouts(data);
-    data->handler->ReceiveMessages(data);
+    read_cb(bev, ctx);
 }
 
 void bev_callbacks::first_send_cb(bufferevent *bev, void *ctx)
@@ -87,8 +88,25 @@ void bev_callbacks::close_on_finished_writecb(bufferevent *bev, void *ctx)
     evbuffer *output = bufferevent_get_output(bev);
     if (!evbuffer_get_length(output))
     {
-        bufferevent_disable(bev, EV_READ | EV_WRITE);
-        data->handler->CloseConnection(data->id, true);
+        data->handler->DisconnectNow(data->id);
+    }
+}
+
+void buf_callbacks::read_data(struct evbuffer *buffer, const struct evbuffer_cb_info *info, void *ctx)
+{
+    if(info->n_added)
+    {
+        connection_data* data = static_cast<connection_data*>(ctx);
+        data->handler->BytesRead(data, info->orig_size, info->n_added);
+    }
+}
+
+void buf_callbacks::wrote_data(struct evbuffer *buffer, const struct evbuffer_cb_info *info, void *ctx)
+{
+    if(info->n_deleted)
+    {
+        connection_data* data = static_cast<connection_data*>(ctx);
+        data->handler->BytesWritten(data, info->orig_size, info->n_deleted);
     }
 }
 
@@ -101,7 +119,7 @@ void dns_callbacks::dns_callback(int result, evutil_addrinfo *ai, void *ctx)
         return;
     }
 
-    std::deque<CConnection> results;
+    std::list<CConnection> results;
     evutil_addrinfo* ai_iter = ai;
     const CConnectionOptions& opts = data->conn.GetOptions();
     const CNetworkConfig& netConfig = data->conn.GetNetConfig();

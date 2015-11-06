@@ -14,7 +14,7 @@ class CSimpleAddrMan
 {
 public:
     void Add(const CConnection& conn);
-    CConnection Get();
+    bool Get(CConnection& conn);
     void AddSeed(const CConnection& conn);
 private:
     std::list<CConnection> m_connections_available;

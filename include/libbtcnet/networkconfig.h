@@ -17,6 +17,10 @@ struct CNetworkConfig
     int header_size;
     unsigned int message_max_size;
     std::vector<unsigned char> message_start;
+
+    int protocol_version;
+    int protocol_handshake_version;
+    int service_flags;
 };
 
 #endif // BITCOIN_NET_NETWORKCONFIG_H
