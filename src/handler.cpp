@@ -299,14 +299,14 @@ void CConnectionHandlerInt::OnIncomingConnected(ConnID id, const CConnection& co
     it->second.swap(moved);
     m_connecting.erase(it);
 
-    if (m_interface.OnIncomingConnection(id, conn, resolved_conn)) {
-        moved->SetRateLimitGroup(m_incoming_rate_limit);
-        {
-            optional_lock(m_conn_mutex, m_enable_threading);
-            m_connected.emplace_hint(m_connected.end(), id, std::move(moved));
-        }
-        m_incoming_conn_count++;
+    if (!m_interface.OnIncomingConnection(id, conn, resolved_conn))
+        return;
+    moved->SetRateLimitGroup(m_incoming_rate_limit);
+    {
+        optional_lock(m_conn_mutex, m_enable_threading);
+        m_connected.emplace_hint(m_connected.end(), id, std::move(moved));
     }
+    m_incoming_conn_count++;
 }
 
 void CConnectionHandlerInt::OnOutgoingConnected(ConnID id, const CConnection& conn, const CConnection& resolved_conn)
@@ -317,16 +317,17 @@ void CConnectionHandlerInt::OnOutgoingConnected(ConnID id, const CConnection& co
     assert(it != m_connecting.end());
     std::unique_ptr<ConnectionBase> moved(nullptr);
     it->second.swap(moved);
-
-    moved->SetRateLimitGroup(m_outgoing_rate_limit);
     m_connecting.erase(it);
+
+    if(!m_interface.OnOutgoingConnection(id, conn, resolved_conn))
+        return;
+    moved->SetRateLimitGroup(m_outgoing_rate_limit);
     {
         optional_lock(m_conn_mutex, m_enable_threading);
         m_connected.emplace_hint(m_connected.end(), id, std::move(moved));
     }
-    m_interface.OnOutgoingConnection(id, conn, resolved_conn);
-    m_interface.OnReadyForFirstSend(id);
     m_outgoing_conn_count++;
+    m_interface.OnReadyForFirstSend(id);
 }
 
 bool CConnectionHandlerInt::OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> > msgs, size_t totalsize)
