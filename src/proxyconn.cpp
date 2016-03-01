@@ -42,21 +42,17 @@ void CProxyConn::Connect()
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
     proxy.GetSockAddr(addr, &addrlen);
 
-    m_bev = BareCreate(m_event_base, BAD_SOCKET, m_handler.GetBevOpts());
-
-    if (!m_bev)
-        OnConnectFailure(BEV_EVENT_ERROR);
-    else
-        BareConnect(m_bev, addr, addrlen, connTimeout);
+    BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, addr, addrlen, connTimeout);
 }
 
-void CProxyConn::OnConnectSuccess()
+void CProxyConn::OnConnectSuccess(event_type<bufferevent>&& bev)
 {
+    m_bev = std::move(bev);
     assert(m_bev);
     InitProxy(m_bev);
 }
 
-void CProxyConn::OnConnectFailure(short event)
+void CProxyConn::OnConnectFailure(short event, int error)
 {
     m_bev.free();
     OnConnectionFailure(ConnectionFailureType::PROXY, event, m_connection, m_retries > 0 ? m_retries-- : m_retries != 0);

@@ -23,20 +23,18 @@ public:
     bool IsOutgoing() const final;
 
 protected:
-    void OnConnectSuccess() final;
-    void OnConnectFailure(short type) final;
+    void OnConnectSuccess(event_type<bufferevent>&& bev) final;
+    void OnConnectFailure(short type, int error) final;
     void OnResolveSuccess(CDNSResponse&& response) final;
     void OnResolveFailure(int result) final;
 
 private:
     void DoResolve();
     void ConnectResolved();
-    void ConnectionFailure(short event);
     int m_retries;
     CDNSResponse m_resolved;
     CDNSResponse::iterator m_iter;
     event_type<evdns_getaddrinfo_request> m_request;
-    event_type<bufferevent> m_bev;
     const event_type<evdns_base>& m_dns_base;
 };
 

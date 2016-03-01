@@ -5,6 +5,7 @@
 #ifndef BTCNET_BARECONN_H
 #define BTCNET_BARECONN_H
 
+#include "eventtypes.h"
 #include <event2/util.h>
 
 template <typename T>
@@ -21,13 +22,13 @@ class CBareConnection
 protected:
     CBareConnection();
     virtual ~CBareConnection();
-    virtual void OnConnectSuccess() = 0;
-    virtual void OnConnectFailure(short type) = 0;
-    bool BareConnect(const event_type<bufferevent>& bev, sockaddr* addr, int addrlen, const timeval&);
-    static event_type<bufferevent> BareCreate(const event_type<event_base>& base, evutil_socket_t socket, int bev_opts);
+    virtual void OnConnectSuccess(event_type<bufferevent>&& bev) = 0;
+    virtual void OnConnectFailure(short type, int err) = 0;
+    void BareConnect(const event_type<event_base>& base, int bev_opts, evutil_socket_t socket, sockaddr* addr, int addrlen, const timeval&);
 
 private:
     static void conn_event(bufferevent* bev, short event, void* ctx);
+    event_type<bufferevent> m_bev;
 };
 
 #endif // BTCNET_BARECONN_H

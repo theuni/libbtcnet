@@ -7,6 +7,7 @@
 
 #include <event2/event.h>
 #include <event2/bufferevent.h>
+#include <event2/util.h>
 #include <assert.h>
 #include <functional>
 
@@ -23,30 +24,30 @@ void CBareConnection::conn_event(bufferevent* bev, short event, void* ctx)
     assert(bev != nullptr);
     assert(ctx != nullptr);
     CBareConnection* data = static_cast<CBareConnection*>(ctx);
-    bufferevent_setcb(bev, nullptr, nullptr, nullptr, nullptr);
     if (event & BEV_EVENT_CONNECTED)
-        data->OnConnectSuccess();
+        data->OnConnectSuccess(std::move(data->m_bev));
     else {
-        data->OnConnectFailure(event);
+        evutil_socket_t sock = bufferevent_getfd(bev);
+        assert(sock != -1);
+        int error = evutil_socket_geterror(sock);
+        data->m_bev.free();
+        data->OnConnectFailure(event, error);
     }
 }
 
-event_type<bufferevent> CBareConnection::BareCreate(const event_type<event_base>& base, evutil_socket_t socket, int bev_opts)
+void CBareConnection::BareConnect(const event_type<event_base>& base, int bev_opts, evutil_socket_t socket, sockaddr* addr, int addrlen, const timeval& connTimeout)
 {
-    return event_type<bufferevent>(bufferevent_socket_new(base, socket, bev_opts));
-}
-
-bool CBareConnection::BareConnect(const event_type<bufferevent>& bev, sockaddr* addr, int addrlen, const timeval& connTimeout)
-{
-    assert(bev != nullptr);
+    assert(!m_bev);
     assert(addr != nullptr);
     assert(addrlen > 0);
 
+    m_bev = event_type<bufferevent>(bufferevent_socket_new(base, socket, bev_opts));
+
     int ret;
-    ret = bufferevent_disable(bev, EV_READ | EV_WRITE);
+    ret = bufferevent_disable(m_bev, EV_READ | EV_WRITE);
     assert(ret == 0);
-    ret = bufferevent_set_timeouts(bev, &connTimeout, &connTimeout);
+    ret = bufferevent_set_timeouts(m_bev, &connTimeout, &connTimeout);
     assert(ret == 0);
-    bufferevent_setcb(bev, nullptr, nullptr, conn_event, this);
-    return bufferevent_socket_connect(bev, addr, addrlen) == 0;
+    bufferevent_setcb(m_bev, nullptr, nullptr, conn_event, this);
+    bufferevent_socket_connect(m_bev, addr, addrlen);
 }

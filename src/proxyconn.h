@@ -23,8 +23,8 @@ public:
     bool IsOutgoing() const final;
 
 protected:
-    void OnConnectSuccess() final;
-    void OnConnectFailure(short type) final;
+    void OnConnectSuccess(event_type<bufferevent>&& bev) final;
+    void OnConnectFailure(short type, int error) final;
     void OnProxyFailure(int error) final;
     void OnProxySuccess(CConnection resolved) final;
 

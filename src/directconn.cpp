@@ -27,7 +27,6 @@ bool CDirectConnection::IsOutgoing() const
 
 void CDirectConnection::Connect()
 {
-    assert(!m_bev);
     assert(m_connection.IsSet());
 
     const CConnectionOptions& opts = m_connection.GetOptions();
@@ -42,30 +41,20 @@ void CDirectConnection::Connect()
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
     m_connection.GetSockAddr(addr, &addrlen);
 
-    m_bev = BareCreate(m_event_base, BAD_SOCKET, m_handler.GetBevOpts());
-
-    if (!m_bev)
-        OnConnectFailure(BEV_EVENT_ERROR);
-    else
-        BareConnect(m_bev, addr, addrlen, connTimeout);
+    BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, addr, addrlen, connTimeout);
 }
 
-void CDirectConnection::OnConnectSuccess()
+void CDirectConnection::OnConnectSuccess(event_type<bufferevent>&& bev)
 {
-    assert(m_bev);
-    event_type<bufferevent> bev(nullptr);
-    bev.swap(m_bev);
     m_retries = m_connection.GetOptions().nRetries;
     OnOutgoingConnected(std::move(bev), m_connection);
 }
 
-void CDirectConnection::OnConnectFailure(short event)
+void CDirectConnection::OnConnectFailure(short event, int error)
 {
-    m_bev.free();
     OnConnectionFailure(ConnectionFailureType::CONNECT, event, m_connection, m_retries > 0 ? m_retries-- : m_retries != 0);
 }
 
 void CDirectConnection::Cancel()
 {
-    m_bev.free();
 }

@@ -30,7 +30,6 @@ CDNSConnection::~CDNSConnection()
 
 void CDNSConnection::Connect()
 {
-    assert(!m_bev);
     assert(!m_request);
 
     if (m_iter == m_resolved.end())
@@ -41,7 +40,6 @@ void CDNSConnection::Connect()
 
 void CDNSConnection::DoResolve()
 {
-    assert(!m_bev);
     assert(!m_request);
     assert(m_resolved.empty());
     assert(m_iter == m_resolved.end());
@@ -66,7 +64,6 @@ void CDNSConnection::DoResolve()
 
 void CDNSConnection::OnResolveFailure(int error)
 {
-    assert(!m_bev);
     assert(m_resolved.empty());
     assert(m_iter == m_resolved.end());
 
@@ -76,7 +73,6 @@ void CDNSConnection::OnResolveFailure(int error)
 
 void CDNSConnection::OnResolveSuccess(CDNSResponse&& response)
 {
-    assert(!m_bev);
     assert(m_resolved.empty());
     assert(m_iter == m_resolved.end());
 
@@ -86,9 +82,9 @@ void CDNSConnection::OnResolveSuccess(CDNSResponse&& response)
     ConnectResolved();
 }
 
-void CDNSConnection::OnConnectSuccess()
+void CDNSConnection::OnConnectSuccess(event_type<bufferevent>&& bev)
 {
-    assert(m_bev);
+    assert(bev);
     assert(!m_resolved.empty());
     assert(m_iter != m_resolved.end());
     assert(!m_request);
@@ -97,41 +93,11 @@ void CDNSConnection::OnConnectSuccess()
     m_resolved.clear();
     m_iter = m_resolved.end();
     m_retries = m_connection.GetOptions().nRetries;
-    event_type<bufferevent> bev(nullptr);
-    bev.swap(m_bev);
     OnOutgoingConnected(std::move(bev), std::move(resolved));
 }
-void CDNSConnection::OnConnectFailure(short event)
+void CDNSConnection::OnConnectFailure(short event, int error)
 {
     assert(!m_request);
-    assert(m_iter != m_resolved.end());
-    assert(!m_resolved.empty());
-
-    m_bev.free();
-    ConnectionFailure(event);
-}
-
-void CDNSConnection::ConnectResolved()
-{
-    assert(!m_bev);
-    assert(m_iter != m_resolved.end());
-    assert(!m_resolved.empty());
-
-    timeval connTimeout;
-    connTimeout.tv_sec = m_connection.GetOptions().nInitialTimeout;
-    connTimeout.tv_usec = 0;
-
-    m_bev = BareCreate(m_event_base, BAD_SOCKET, m_handler.GetBevOpts());
-
-    if (!m_bev)
-        ConnectionFailure(BEV_EVENT_ERROR);
-    else
-        BareConnect(m_bev, m_iter->ai_addr, m_iter->ai_addrlen, connTimeout);
-}
-
-void CDNSConnection::ConnectionFailure(short event)
-{
-    assert(!m_bev);
     assert(m_iter != m_resolved.end());
     assert(!m_resolved.empty());
 
@@ -139,10 +105,21 @@ void CDNSConnection::ConnectionFailure(short event)
     OnConnectionFailure(ConnectionFailureType::CONNECT, event, std::move(resolved), ++m_iter != m_resolved.end() || m_retries != 0);
 }
 
+void CDNSConnection::ConnectResolved()
+{
+    assert(m_iter != m_resolved.end());
+    assert(!m_resolved.empty());
+
+    timeval connTimeout;
+    connTimeout.tv_sec = m_connection.GetOptions().nInitialTimeout;
+    connTimeout.tv_usec = 0;
+
+    BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, m_iter->ai_addr, m_iter->ai_addrlen, connTimeout);
+}
+
 void CDNSConnection::Cancel()
 {
     m_request.free();
-    m_bev.free();
     m_resolved.clear();
     m_iter = m_resolved.end();
 }
