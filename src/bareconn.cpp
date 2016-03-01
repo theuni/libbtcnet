@@ -28,6 +28,7 @@ void CBareConnection::conn_event(bufferevent* bev, short event, void* ctx)
         data->OnConnectSuccess(std::move(data->m_bev));
     else {
         evutil_socket_t sock = bufferevent_getfd(bev);
+        (void)sock;
         assert(sock != -1);
         int error = evutil_socket_geterror(sock);
         data->m_bev.free();

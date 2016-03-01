@@ -48,6 +48,7 @@ uint64_t first_complete_message_size(const CNetworkConfig& config, evbuffer* inp
         std::vector<unsigned char> partial_header(size_needed);
         int ret = evbuffer_copyout(input, &partial_header[0], size_needed);
         assert(ret == size_needed);
+        (void)ret;
         if (!config.message_start.empty() && memcmp(&partial_header[0], &config.message_start[0], config.message_start.size()) != 0) {
             fBadMsgStart = true;
             return 0;
