@@ -26,24 +26,32 @@ CBareProxy::~CBareProxy()
 {
 }
 
-void CBareProxy::InitProxy(const event_type<bufferevent>& bev)
+void CBareProxy::InitProxy(event_type<bufferevent>&& bev)
 {
     assert(bev);
+    assert(!m_bev);
+    m_bev.swap(bev);
     static const uint8_t pchSocks5Init[] = {0x05, 0x01, 0x00};
     static const uint8_t pchSocks5InitAuth[] = {0x05, 0x02, 0x02, 0x00};
 
-    bufferevent_setcb(bev, receive_init, nullptr, event_cb, this);
-    bufferevent_setwatermark(bev, EV_READ, 2, 0);
+    bufferevent_setcb(m_bev, receive_init, nullptr, event_cb, this);
+    bufferevent_setwatermark(m_bev, EV_READ, 2, 0);
 
     const CProxy& proxy = m_proxy_connection.GetProxy();
     assert(proxy.IsSet());
     const CProxyAuth& auth = proxy.GetAuth();
     if (auth.IsSet())
-        bufferevent_write(bev, pchSocks5InitAuth, sizeof(pchSocks5InitAuth));
+        bufferevent_write(m_bev, pchSocks5InitAuth, sizeof(pchSocks5InitAuth));
     else
-        bufferevent_write(bev, pchSocks5Init, sizeof(pchSocks5Init));
+        bufferevent_write(m_bev, pchSocks5Init, sizeof(pchSocks5Init));
 
-    bufferevent_enable(bev, EV_READ | EV_WRITE);
+    bufferevent_enable(m_bev, EV_READ | EV_WRITE);
+}
+
+void CBareProxy::ProxyFailure(int error)
+{
+    m_bev.free();
+    OnProxyFailure(error);
 }
 
 bool CBareProxy::writeproto(bufferevent* bev, const CConnection& conn)
@@ -128,7 +136,7 @@ void CBareProxy::read_final(bufferevent* bev, void* ctx)
     result = evbuffer_copyout(input, pchRet2, sizeof(pchRet2));
     assert(result == sizeof(pchRet2));
     if (pchRet2[0] != 0x05 || pchRet2[1] != 0x00) {
-        data->OnProxyFailure(0);
+        data->ProxyFailure(0);
         return;
     }
     size_t needSize = 6;
@@ -160,7 +168,7 @@ void CBareProxy::read_final(bufferevent* bev, void* ctx)
         sockaddr_size = 0;
         break;
     default:
-        data->OnProxyFailure(0);
+        data->ProxyFailure(0);
         return;
     }
 
@@ -188,7 +196,7 @@ void CBareProxy::read_final(bufferevent* bev, void* ctx)
     CConnection ret = conn;
     if (ip && conn.IsDNS() && conn.GetOptions().doResolve == CConnectionOptions::RESOLVE_ONLY)
         ret = CConnection(conn.GetOptions(), conn.GetNetConfig(), conn.GetProxy(), (sockaddr*)&addr, sockaddr_size);
-    data->OnProxySuccess(std::move(ret));
+    data->OnProxySuccess(std::move(data->m_bev), std::move(ret));
 }
 
 void CBareProxy::check_auth_response(bufferevent* bev, void* ctx)
@@ -198,19 +206,19 @@ void CBareProxy::check_auth_response(bufferevent* bev, void* ctx)
     char pchRetA[2];
 
     if (bufferevent_read(bev, pchRetA, sizeof(pchRetA)) != sizeof(pchRetA)) {
-        data->OnProxyFailure(0);
+        data->ProxyFailure(0);
         return;
     }
 
     if (pchRetA[0] != 0x01 && pchRetA[1] != 0x00) {
-        data->OnProxyFailure(0);
+        data->ProxyFailure(0);
         return;
     }
 
     bufferevent_setcb(bev, read_final, nullptr, event_cb, ctx);
 
     if (!writeproto(bev, conn)) {
-        data->OnProxyFailure(0);
+        data->ProxyFailure(0);
         return;
     }
 }
@@ -222,11 +230,11 @@ void CBareProxy::receive_init(bufferevent* bev, void* ctx)
     const CProxyAuth& auth(conn.GetProxy().GetAuth());
     char pchRet1[2];
     if (bufferevent_read(bev, pchRet1, sizeof(pchRet1)) != sizeof(pchRet1)) {
-        data->OnProxyFailure(0);
+        data->ProxyFailure(0);
         return;
     }
     if (pchRet1[0] != 0x05) {
-        data->OnProxyFailure(0);
+        data->ProxyFailure(0);
         return;
     }
 
@@ -234,13 +242,13 @@ void CBareProxy::receive_init(bufferevent* bev, void* ctx)
     if (useAuth) {
         bufferevent_setcb(bev, check_auth_response, nullptr, event_cb, ctx);
         if (!write_auth(bev, auth)) {
-            data->OnProxyFailure(0);
+            data->ProxyFailure(0);
             return;
         }
     } else {
         bufferevent_setcb(bev, read_final, nullptr, event_cb, ctx);
         if (!writeproto(bev, conn))
-            data->OnProxyFailure(0);
+            data->ProxyFailure(0);
     }
 }
 
@@ -248,6 +256,6 @@ void CBareProxy::event_cb(bufferevent* bev, short events, void* ctx)
 {
     if (events & BEV_EVENT_ERROR || events & BEV_EVENT_EOF || events & BEV_EVENT_TIMEOUT || events & BEV_EVENT_CONNECTED) {
         CBareProxy* data = static_cast<CBareProxy*>(ctx);
-        data->OnProxyFailure(0);
+        data->ProxyFailure(0);
     }
 }

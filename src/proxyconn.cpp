@@ -24,7 +24,6 @@ bool CProxyConn::IsOutgoing() const
 
 void CProxyConn::Connect()
 {
-    assert(!m_bev);
     assert(m_connection.IsSet());
 
     const CConnectionOptions& opts = m_connection.GetOptions();
@@ -47,32 +46,24 @@ void CProxyConn::Connect()
 
 void CProxyConn::OnConnectSuccess(event_type<bufferevent>&& bev)
 {
-    m_bev = std::move(bev);
-    assert(m_bev);
-    InitProxy(m_bev);
+    InitProxy(std::move(bev));
 }
 
 void CProxyConn::OnConnectFailure(short event, int error)
 {
-    m_bev.free();
     OnConnectionFailure(ConnectionFailureType::PROXY, event, m_connection, m_retries > 0 ? m_retries-- : m_retries != 0);
 }
 
 void CProxyConn::OnProxyFailure(int event)
 {
-    m_bev.free();
     OnConnectionFailure(ConnectionFailureType::CONNECT, event, m_connection, m_retries > 0 ? m_retries-- : m_retries != 0);
 }
 
-void CProxyConn::OnProxySuccess(CConnection resolved)
+void CProxyConn::OnProxySuccess(event_type<bufferevent>&& bev, CConnection resolved)
 {
-    assert(m_bev);
-    event_type<bufferevent> bev(nullptr);
-    bev.swap(m_bev);
-    OnOutgoingConnected(std::move(bev), m_connection);
+    OnOutgoingConnected(std::move(bev), std::move(resolved));
 }
 
 void CProxyConn::Cancel()
 {
-    m_bev.free();
 }

@@ -26,11 +26,10 @@ protected:
     void OnConnectSuccess(event_type<bufferevent>&& bev) final;
     void OnConnectFailure(short type, int error) final;
     void OnProxyFailure(int error) final;
-    void OnProxySuccess(CConnection resolved) final;
+    void OnProxySuccess(event_type<bufferevent>&& bev, CConnection resolved) final;
 
 private:
     int m_retries;
-    event_type<bufferevent> m_bev;
 };
 
 #endif // BTCNET_PROXYCONN_H
