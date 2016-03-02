@@ -319,7 +319,7 @@ void CConnectionHandlerInt::OnOutgoingConnected(ConnID id, const CConnection& co
     it->second.swap(moved);
     m_connecting.erase(it);
 
-    if(!m_interface.OnOutgoingConnection(id, conn, resolved_conn))
+    if (!m_interface.OnOutgoingConnection(id, conn, resolved_conn))
         return;
     moved->SetRateLimitGroup(m_outgoing_rate_limit);
     {

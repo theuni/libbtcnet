@@ -9,28 +9,29 @@ class CConnman final : public CConnectionHandler
 {
 public:
     CConnman(bool enable_threads)
-    : CConnectionHandler(enable_threads)
+        : CConnectionHandler(enable_threads)
     {
     }
     void Run(int max_outgoing)
     {
         Start(max_outgoing);
-        while(PumpEvents(true));
+        while (PumpEvents(true))
+            ;
     }
-protected:
 
+protected:
     std::list<CConnection> OnNeedOutgoingConnections(int need_count) final
     {
         std::list<CConnection> ret;
-        if(!m_connections.empty())
+        if (!m_connections.empty())
             ret.splice(ret.end(), m_connections);
         return ret;
     }
     bool OnOutgoingConnection(ConnID id, const CConnection& conn, const CConnection& resolved_conn) final
     {
-        if(resolved_conn.GetNetConfig().message_start == mainnet_message_start)
+        if (resolved_conn.GetNetConfig().message_start == mainnet_message_start)
             printf("mainnet connected first\n");
-        else if(resolved_conn.GetNetConfig().message_start == testnet_message_start)
+        else if (resolved_conn.GetNetConfig().message_start == testnet_message_start)
             printf("testnet connected first\n");
         Shutdown();
         return true;
@@ -49,12 +50,12 @@ protected:
            that it can be expressed in the parameters below.
          */
         CNetworkConfig mainnet_config;
-        mainnet_config.header_msg_string_offset=4;
-        mainnet_config.header_msg_size_offset=16;
-        mainnet_config.header_msg_size_size=4;
-        mainnet_config.header_msg_string_size=12;
-        mainnet_config.header_size=24;
-        mainnet_config.message_max_size=1000000 + mainnet_config.header_size;
+        mainnet_config.header_msg_string_offset = 4;
+        mainnet_config.header_msg_size_offset = 16;
+        mainnet_config.header_msg_size_size = 4;
+        mainnet_config.header_msg_string_size = 12;
+        mainnet_config.header_size = 24;
+        mainnet_config.message_max_size = 1000000 + mainnet_config.header_size;
         mainnet_config.message_start = mainnet_message_start;
         mainnet_config.protocol_version = 70011;
         mainnet_config.protocol_handshake_version = 209;
@@ -80,7 +81,7 @@ protected:
         m_connections.emplace_back(myopts, testnet_config, "testnet-seed.bitcoin.schildbach.de", 8333);
     }
 
-    bool OnIncomingConnection(ConnID id, const CConnection& listenconn, const CConnection& resolved_conn) final { return false;}
+    bool OnIncomingConnection(ConnID id, const CConnection& listenconn, const CConnection& resolved_conn) final { return false; }
     void OnDnsResponse(const CConnection& conn, std::list<CConnection> results) final {}
     void OnConnectionFailure(const CConnection& conn, const CConnection& resolved, bool retry) final {}
     void OnDisconnected(ConnID id, bool persistent) final {}
@@ -88,12 +89,13 @@ protected:
     void OnDnsFailure(const CConnection& conn, bool retry) final {}
     void OnWriteBufferFull(ConnID id, size_t bufsize) final {}
     void OnWriteBufferReady(ConnID id, size_t bufsize) final {}
-    bool OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> > msgs, size_t totalsize) final {return false;}
+    bool OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> > msgs, size_t totalsize) final { return false; }
     void OnMalformedMessage(ConnID id) final {}
     void OnReadyForFirstSend(ConnID id) final {}
     void OnProxyFailure(const CConnection& conn, bool retry) final {}
     void OnBytesRead(ConnID id, size_t bytes, size_t total_bytes) final {}
     void OnBytesWritten(ConnID id, size_t bytes, size_t total_bytes) final {}
+
 private:
     std::list<CConnection> m_connections;
 };
@@ -103,4 +105,3 @@ int main()
     CConnman test(false);
     test.Run(8);
 }
-

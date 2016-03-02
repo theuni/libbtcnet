@@ -120,7 +120,7 @@ event_type<evdns_getaddrinfo_request> CDNSResolve::Resolve(const event_type<evdn
     // evdns_getaddrinfo may return NULL on success.
     event_type<evdns_getaddrinfo_request> ret(nullptr);
     if (req)
-        ret = event_type<evdns_getaddrinfo_request>();
+        ret = req;
     return ret;
 }
 

@@ -7,7 +7,7 @@
 
 #include "resolve.h"
 #include "handler.h"
-#include "include/libbtcnet/connection.h"
+#include "libbtcnet/connection.h"
 
 class CConnection;
 class CConnectionHandlerInt;
