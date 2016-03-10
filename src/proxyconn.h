@@ -13,7 +13,7 @@ class CConnection;
 struct event_base;
 struct bufferevent;
 
-class CProxyConn : public ConnectionBase, public CBareConnection, public CBareProxy
+class CProxyConn final : public ConnectionBase, public CBareConnection, public CBareProxy
 {
 public:
     CProxyConn(CConnectionHandlerInt& handler, CConnection&& conn, ConnID id);

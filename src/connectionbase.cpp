@@ -62,6 +62,10 @@ void ConnectionBase::UnpauseRecv()
 void ConnectionBase::Retry(ConnID newId)
 {
     m_bev.free();
+    m_rate_cfg.free();
+    m_bytes_read = 0;
+    m_bytes_written = 0;
+
     m_id = newId;
     DEBUG_PRINT(LOGVERBOSE, "id:", m_id, "queuing reconnect");
     timeval timeout{m_connection.GetOptions().nRetryInterval, 0};
@@ -71,12 +75,11 @@ void ConnectionBase::Retry(ConnID newId)
 void ConnectionBase::SetRateLimit(const CRateLimit& limit)
 {
     assert(m_bev != nullptr);
+
     event_type<ev_token_bucket_cfg> rate_cfg_new(ev_token_bucket_cfg_new(limit.nMaxReadRate, limit.nMaxBurstRead, limit.nMaxWriteRate, limit.nMaxBurstWrite, nullptr));
-    {
-        BufferEventLocker lock(m_bev);
-        bufferevent_set_rate_limit(m_bev, rate_cfg_new);
-        m_rate_cfg.swap(rate_cfg_new);
-    }
+    BufferEventLocker lock(m_bev);
+    bufferevent_set_rate_limit(m_bev, rate_cfg_new);
+    m_rate_cfg.swap(rate_cfg_new);
 }
 
 void ConnectionBase::OnConnectionFailure(ConnectionFailureType type, int error, CConnection failed, bool retry)
@@ -129,9 +132,8 @@ void ConnectionBase::DisconnectWhenFinishedInt()
         DisconnectInt(0);
 }
 
-void ConnectionBase::SetRateLimitGroup(bufferevent_rate_limit_group* group)
+void ConnectionBase::SetRateLimitGroup(event_type<bufferevent_rate_limit_group>& group)
 {
-    assert(group != nullptr);
     bufferevent_add_to_rate_limit_group(m_bev, group);
 }
 

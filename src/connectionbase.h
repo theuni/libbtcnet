@@ -30,20 +30,14 @@ public:
     virtual void Cancel() = 0;
     virtual bool IsOutgoing() const = 0;
     void Disconnect();
-    void DisconnectInt(int reason);
     void DisconnectWhenFinished();
-    void DisconnectWhenFinishedInt();
     bool Write(const unsigned char* data, size_t size);
-    void CheckWriteBufferInt();
     void SetRateLimit(const CRateLimit& limit);
-    void SetRateLimitInt(const CRateLimit& limit);
     void PauseRecv();
-    void PauseRecvInt();
     void UnpauseRecv();
-    void UnpauseRecvInt();
     void WriteData();
     void Retry(ConnID newId);
-    void SetRateLimitGroup(bufferevent_rate_limit_group* group);
+    void SetRateLimitGroup(event_type<bufferevent_rate_limit_group>& group);
     const CConnection& GetBaseConnection() const;
 
 protected:
@@ -54,7 +48,13 @@ protected:
     void OnDisconnected();
 
 private:
+    void DisconnectInt(int reason);
+    void DisconnectWhenFinishedInt();
+    void PauseRecvInt();
+    void UnpauseRecvInt();
+    void SetRateLimitInt(const CRateLimit& limit);
     void InitConnection();
+    void CheckWriteBufferInt();
     static void event_cb(bufferevent* bev, short events, void* ctx);
     static void read_cb(bufferevent* bev, void* ctx);
     static void write_cb(bufferevent* bev, void* ctx);

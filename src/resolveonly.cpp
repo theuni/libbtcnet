@@ -22,8 +22,6 @@ void CResolveOnly::Resolve()
     assert(!m_request);
     assert(m_connection.IsDNS());
 
-    std::string host = m_connection.GetHost();
-    printf("host size: %lu\n", host.size());
     const CConnectionOptions& opts = m_connection.GetOptions();
     evutil_addrinfo hint;
     memset(&hint, 0, sizeof(hint));

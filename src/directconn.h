@@ -13,7 +13,7 @@ class CConnection;
 struct event_base;
 struct bufferevent;
 
-class CDirectConnection : public ConnectionBase, public CBareConnection
+class CDirectConnection final : public ConnectionBase, public CBareConnection
 {
 public:
     CDirectConnection(CConnectionHandlerInt& handler, CConnection&& conn, ConnID id);
@@ -28,7 +28,6 @@ protected:
 
 private:
     int m_retries;
-    event_type<bufferevent> m_bev;
 };
 
 #endif // BTCNET_DIRECTCONN_H

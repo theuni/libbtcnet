@@ -102,8 +102,6 @@ protected:
     /// enable_threading to false to avoid locking overhead.
     ///
     /// \param enable_threading Whether the handler should be threadsafe
-    ///
-    /// \returns true on success.
 
     explicit CConnectionHandler(bool enable_threading);
 
@@ -261,7 +259,7 @@ protected:
     /// complete message has been received.
     /// \param id The connection's unique id
     /// \param bytes Number of bytes read since the last notification
-    /// \param bytes Total bytes read
+    /// \param total_bytes Total bytes read
     virtual void OnBytesRead(ConnID id, size_t bytes, size_t total_bytes) = 0;
 
     /// \brief Notification of bytes written to the remote connection
@@ -270,7 +268,7 @@ protected:
     /// complete message has been sent.
     /// \param id The connection's unique id
     /// \param bytes Number of bytes written since the last notification
-    /// \param bytes Total bytes written
+    /// \param total_bytes Total bytes written
     virtual void OnBytesWritten(ConnID id, size_t bytes, size_t total_bytes) = 0;
 
     /// \brief Notification of shutdown of the manager
