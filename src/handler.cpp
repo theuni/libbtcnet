@@ -38,8 +38,10 @@ static constexpr int g_max_simultaneous_connecting = 8;
 CConnectionHandlerInt::CConnectionHandlerInt(CConnectionHandler& handler, bool enable_threading)
     : m_interface(handler), m_connection_index(0), m_bytes_read(0), m_bytes_written(0), m_outgoing_conn_count(0), m_incoming_conn_count(0), m_outgoing_conn_limit(0), m_enable_threading(enable_threading), m_shutdown(false)
 {
+    bool result = true;
     if (m_enable_threading)
-        setup_threads();
+        result = setup_threads();
+    assert(result);
 }
 
 CConnectionHandlerInt::~CConnectionHandlerInt()

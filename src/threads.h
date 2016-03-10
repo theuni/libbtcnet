@@ -45,17 +45,15 @@ private:
 #define optional_lock(mutex, enabled)
 #endif
 
-static inline void setup_threads()
+static inline bool setup_threads()
 {
 #if defined(NO_THREADS)
-    throw std::runtime_error("Thread support requested but not compiled in.");
+    return false;
 #else
 #if defined(EVTHREAD_USE_WINDOWS_THREADS_IMPLEMENTED)
-    evthread_use_windows_threads();
-    return;
+    return evthread_use_windows_threads() == 0;
 #elif defined(EVTHREAD_USE_PTHREADS_IMPLEMENTED)
-    evthread_use_pthreads();
-    return;
+    return evthread_use_pthreads() == 0;
 #endif
 #endif
 }
