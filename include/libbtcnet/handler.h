@@ -2,13 +2,13 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_HANDLER_H
-#define BTCNET_HANDLER_H
+#ifndef LIBBTCNET_HANDLER_H
+#define LIBBTCNET_HANDLER_H
 
-#include <vector>
 #include <list>
-#include <stdint.h>
+#include <vector>
 #include <stddef.h>
+#include <stdint.h>
 
 class CConnection;
 class CRateLimit;
@@ -288,4 +288,4 @@ private:
     CConnectionHandlerInt* m_internal;
 };
 
-#endif // BTCNET_HANDLER_H
+#endif // LIBBTCNET_HANDLER_H

@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_THREADS_H
-#define BTCNET_THREADS_H
+#ifndef LIBBTCNET_SRC_THREADS_H
+#define LIBBTCNET_SRC_THREADS_H
 
 #include "eventtypes.h"
 
@@ -63,6 +63,7 @@ static inline int enable_threads_for_handler(const event_type<event_base>& base)
 #if !defined(_EVENT_DISABLE_THREAD_SUPPORT) && !defined(NO_THREADS)
     return evthread_make_base_notifiable(base);
 #else
+    (void)base;
     return 0;
 #endif
 }

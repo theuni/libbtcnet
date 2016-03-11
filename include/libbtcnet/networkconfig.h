@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_NETWORKCONFIG_H
-#define BTCNET_NETWORKCONFIG_H
+#ifndef LIBBTCNET_NETWORKCONFIG_H
+#define LIBBTCNET_NETWORKCONFIG_H
 
 #include <vector>
 
@@ -21,4 +21,4 @@ struct CNetworkConfig {
     int service_flags;
 };
 
-#endif // BTCNET_NETWORKCONFIG_H
+#endif // LIBBTCNET_NETWORKCONFIG_H

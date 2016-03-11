@@ -2,12 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_RESOLVEONLY_H
-#define BTCNET_RESOLVEONLY_H
+#ifndef LIBBTCNET_SRC_RESOLVEONLY_H
+#define LIBBTCNET_SRC_RESOLVEONLY_H
 
-#include "resolve.h"
 #include "handler.h"
 #include "libbtcnet/connection.h"
+#include "resolve.h"
 
 class CConnection;
 class CConnectionHandlerInt;
@@ -23,7 +23,7 @@ public:
     void Retry();
 
 protected:
-    void OnResolveFailure(int result) final;
+    void OnResolveFailure(int error) final;
     void OnResolveSuccess(CDNSResponse&& response) final;
 
 private:
@@ -36,4 +36,4 @@ private:
     const timeval m_retry_timeout;
 };
 
-#endif // BTCNET_RESOLVEONLY_H
+#endif // LIBBTCNET_SRC_RESOLVEONLY_H

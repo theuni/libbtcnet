@@ -2,11 +2,11 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_DIRECTCONN_H
-#define BTCNET_DIRECTCONN_H
+#ifndef LIBBTCNET_SRC_DIRECTCONN_H
+#define LIBBTCNET_SRC_DIRECTCONN_H
 
-#include "connectionbase.h"
 #include "bareconn.h"
+#include "connectionbase.h"
 #include "eventtypes.h"
 
 class CConnection;
@@ -24,10 +24,10 @@ public:
 
 protected:
     void OnConnectSuccess(event_type<bufferevent>&& bev) final;
-    void OnConnectFailure(short type, int error) final;
+    void OnConnectFailure(short event, int error) final;
 
 private:
     int m_retries;
 };
 
-#endif // BTCNET_DIRECTCONN_H
+#endif // LIBBTCNET_SRC_DIRECTCONN_H

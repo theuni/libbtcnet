@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_EVENTTYPES_H
-#define BTCNET_EVENTTYPES_H
+#ifndef LIBBTCNET_SRC_EVENTTYPES_H
+#define LIBBTCNET_SRC_EVENTTYPES_H
 
 #include <cstddef>
 #include <assert.h>

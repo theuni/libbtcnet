@@ -5,8 +5,8 @@
 #include "incomingconn.h"
 #include "eventtypes.h"
 
-#include <event2/event.h>
 #include <event2/bufferevent.h>
+#include <event2/event.h>
 #include <string.h>
 #include <assert.h>
 

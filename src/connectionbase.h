@@ -2,13 +2,13 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_CONNECTIONBASE_H
-#define BTCNET_CONNECTIONBASE_H
+#ifndef LIBBTCNET_SRC_CONNECTIONBASE_H
+#define LIBBTCNET_SRC_CONNECTIONBASE_H
 
-#include "libbtcnet/connection.h"
-#include "handler.h"
 #include "event.h"
 #include "eventtypes.h"
+#include "handler.h"
+#include "libbtcnet/connection.h"
 
 struct CConnFailure {
     int type;
@@ -44,7 +44,7 @@ protected:
     ConnectionBase(CConnectionHandlerInt& handler, CConnection&& conn, ConnID id);
     void OnOutgoingConnected(event_type<bufferevent>&& bev, CConnection resolved);
     void OnIncomingConnected(event_type<bufferevent>&& bev, sockaddr* addr, int addrsize);
-    void OnConnectionFailure(ConnectionFailureType type, int error, CConnection resolved, bool retry);
+    void OnConnectionFailure(ConnectionFailureType type, int error, CConnection failed, bool retry);
     void OnDisconnected();
 
 private:
@@ -55,15 +55,15 @@ private:
     void SetRateLimitInt(const CRateLimit& limit);
     void InitConnection();
     void CheckWriteBufferInt();
-    static void event_cb(bufferevent* bev, short events, void* ctx);
+    static void event_cb(bufferevent* /*unused*/, short type, void* ctx);
     static void read_cb(bufferevent* bev, void* ctx);
     static void write_cb(bufferevent* bev, void* ctx);
     static void close_on_finished_writecb(bufferevent* bev, void* ctx);
     static void first_read_cb(bufferevent* bev, void* ctx);
     static void first_write_cb(bufferevent* bev, void* ctx);
 
-    static void read_data(struct evbuffer* buffer, const struct evbuffer_cb_info* info, void* ctx);
-    static void wrote_data(struct evbuffer* buffer, const struct evbuffer_cb_info* info, void* ctx);
+    static void read_data(struct evbuffer* /*unused*/, const struct evbuffer_cb_info* info, void* ctx);
+    static void wrote_data(struct evbuffer* /*unused*/, const struct evbuffer_cb_info* info, void* ctx);
 
 protected:
     CConnectionHandlerInt& m_handler;
@@ -84,4 +84,4 @@ private:
     CEvent m_check_write_buffer_func;
 };
 
-#endif // BTCNET_CONNECTIONBASE_H
+#endif // LIBBTCNET_SRC_CONNECTIONBASE_H

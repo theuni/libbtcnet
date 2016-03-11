@@ -49,14 +49,14 @@ void CProxyConn::OnConnectSuccess(event_type<bufferevent>&& bev)
     InitProxy(std::move(bev));
 }
 
-void CProxyConn::OnConnectFailure(short event, int error)
+void CProxyConn::OnConnectFailure(short event, int /*error*/)
 {
-    OnConnectionFailure(ConnectionFailureType::PROXY, event, m_connection, m_retries > 0 ? m_retries-- : m_retries != 0);
+    OnConnectionFailure(ConnectionFailureType::PROXY, event, m_connection, m_retries > 0 ? m_retries-- != 0 : m_retries != 0);
 }
 
 void CProxyConn::OnProxyFailure(int event)
 {
-    OnConnectionFailure(ConnectionFailureType::CONNECT, event, m_connection, m_retries > 0 ? m_retries-- : m_retries != 0);
+    OnConnectionFailure(ConnectionFailureType::CONNECT, event, m_connection, m_retries > 0 ? m_retries-- != 0 : m_retries != 0);
 }
 
 void CProxyConn::OnProxySuccess(event_type<bufferevent>&& bev, CConnection resolved)

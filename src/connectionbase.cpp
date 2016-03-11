@@ -4,13 +4,13 @@
 
 #include "connectionbase.h"
 #include "message.h"
-#include "eventtypes.h"
+#include "event2/buffer.h"
 #include "event2/bufferevent.h"
 #include "event2/event.h"
-#include "event2/buffer.h"
+#include "eventtypes.h"
 #include <assert.h>
-#include <stdio.h>
 #include "logger.h"
+#include <stdio.h>
 
 struct BufferEventLocker {
     explicit BufferEventLocker(bufferevent* bev) : m_bev(bev)
@@ -31,9 +31,7 @@ ConnectionBase::ConnectionBase(CConnectionHandlerInt& handler, CConnection&& con
 {
 }
 
-ConnectionBase::~ConnectionBase()
-{
-}
+ConnectionBase::~ConnectionBase() = default;
 
 void ConnectionBase::Disconnect()
 {
@@ -93,7 +91,7 @@ const CConnection& ConnectionBase::GetBaseConnection() const
     return m_connection;
 }
 
-void ConnectionBase::DisconnectInt(int reason)
+void ConnectionBase::DisconnectInt(int /*reason*/)
 {
     DEBUG_PRINT(LOGINFO, "id:", m_id, "disconnecting");
     m_disconnect_func.del();
@@ -116,7 +114,7 @@ void ConnectionBase::DisconnectWhenFinishedInt()
     {
         BufferEventLocker lock(m_bev);
         evbuffer* output = bufferevent_get_output(m_bev);
-        if (evbuffer_get_length(output)) {
+        if (evbuffer_get_length(output) != 0u) {
             DEBUG_PRINT(LOGINFO, "id:", m_id, "disconnecting when finished");
             bufferevent_disable(m_bev, EV_READ);
             bufferevent_setwatermark(m_bev, EV_WRITE, 0, 0);
@@ -205,7 +203,7 @@ void ConnectionBase::CheckWriteBufferInt()
         BufferEventLocker lock(m_bev);
         evbuffer* output = bufferevent_get_output(m_bev);
         buflen = evbuffer_get_length(output);
-        if ((int)buflen >= maxsend) {
+        if (static_cast<int>(buflen) >= maxsend) {
             full = true;
             bufferevent_setcb(m_bev, read_cb, write_cb, event_cb, this);
         }
@@ -235,10 +233,10 @@ void ConnectionBase::first_write_cb(bufferevent* bev, void* ctx)
     bufferevent_setcb(bev, read_cb, nullptr, event_cb, ctx);
 }
 
-void ConnectionBase::read_data(struct evbuffer* buffer, const struct evbuffer_cb_info* info, void* ctx)
+void ConnectionBase::read_data(struct evbuffer* /*unused*/, const struct evbuffer_cb_info* info, void* ctx)
 {
     assert(ctx);
-    if (info->n_added) {
+    if (info->n_added != 0u) {
         ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
         base->m_bytes_read += info->n_added;
         base->m_handler.m_interface.OnBytesRead(base->m_id, info->n_added, base->m_bytes_read);
@@ -246,10 +244,10 @@ void ConnectionBase::read_data(struct evbuffer* buffer, const struct evbuffer_cb
     }
 }
 
-void ConnectionBase::wrote_data(struct evbuffer* buffer, const struct evbuffer_cb_info* info, void* ctx)
+void ConnectionBase::wrote_data(struct evbuffer* /*unused*/, const struct evbuffer_cb_info* info, void* ctx)
 {
     assert(ctx);
-    if (info->n_deleted) {
+    if (info->n_deleted != 0u) {
         ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
         base->m_bytes_written += info->n_deleted;
         base->m_handler.m_interface.OnBytesWritten(base->m_id, info->n_deleted, base->m_bytes_written);
@@ -257,13 +255,13 @@ void ConnectionBase::wrote_data(struct evbuffer* buffer, const struct evbuffer_c
     }
 }
 
-void ConnectionBase::event_cb(bufferevent* bev, short type, void* ctx)
+void ConnectionBase::event_cb(bufferevent* /*unused*/, short type, void* ctx)
 {
     assert(ctx);
     ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
-    if ((type & BEV_EVENT_TIMEOUT) ||
-        (type & BEV_EVENT_EOF) ||
-        (type & BEV_EVENT_ERROR))
+    if (((type & BEV_EVENT_TIMEOUT) != 0) ||
+        ((type & BEV_EVENT_EOF) != 0) ||
+        ((type & BEV_EVENT_ERROR) != 0))
         base->DisconnectInt(0);
 }
 
@@ -291,14 +289,14 @@ void ConnectionBase::read_cb(bufferevent* bev, void* ctx)
                 break;
             } else if (fBadMsgStart) {
                 break;
-            } else if (msgsize && fComplete) {
+            } else if ((msgsize != 0u) && fComplete) {
                 msgs.emplace_back(msgsize, 0);
                 evbuffer_remove(input, msgs.back().data(), msgsize);
                 totalsize += msgsize;
             }
         } while (fComplete);
 
-        if (msgsize && !fBadMsgStart && !fTooBig) {
+        if ((msgsize != 0u) && !fBadMsgStart && !fTooBig) {
             size_t buflen = evbuffer_get_length(input);
             if (buflen < msgsize + netconfig.header_size)
                 evbuffer_expand(input, msgsize + netconfig.header_size - buflen);
@@ -317,7 +315,7 @@ void ConnectionBase::read_cb(bufferevent* bev, void* ctx)
     } else if (fTooBig) {
         DEBUG_PRINT(LOGWARN, "id:", base->m_id, "Received an oversized message");
         base->DisconnectInt(0);
-    } else if (totalsize) {
+    } else if (totalsize != 0u) {
         DEBUG_PRINT(LOGINFO, "id:", base->m_id, "Received", msgs.size(), "messages");
         base->m_handler.OnReceiveMessages(base->m_id, std::move(msgs), totalsize);
     }
@@ -333,7 +331,7 @@ void ConnectionBase::write_cb(bufferevent* bev, void* ctx)
     base->m_handler.OnWriteBufferReady(base->m_id, buflen);
 }
 
-void ConnectionBase::close_on_finished_writecb(bufferevent* bev, void* ctx)
+void ConnectionBase::close_on_finished_writecb(bufferevent* /*unused*/, void* ctx)
 {
     assert(ctx);
     ConnectionBase* base = static_cast<ConnectionBase*>(ctx);

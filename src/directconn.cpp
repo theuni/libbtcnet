@@ -5,8 +5,8 @@
 #include "directconn.h"
 #include "logger.h"
 
-#include <event2/event.h>
 #include <event2/bufferevent.h>
+#include <event2/event.h>
 #include <string.h>
 #include <assert.h>
 
@@ -50,9 +50,9 @@ void CDirectConnection::OnConnectSuccess(event_type<bufferevent>&& bev)
     OnOutgoingConnected(std::move(bev), m_connection);
 }
 
-void CDirectConnection::OnConnectFailure(short event, int error)
+void CDirectConnection::OnConnectFailure(short event, int /*error*/)
 {
-    OnConnectionFailure(ConnectionFailureType::CONNECT, event, m_connection, m_retries > 0 ? m_retries-- : m_retries != 0);
+    OnConnectionFailure(ConnectionFailureType::CONNECT, event, m_connection, m_retries > 0 ? m_retries-- != 0 : m_retries != 0);
 }
 
 void CDirectConnection::Cancel()

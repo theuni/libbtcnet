@@ -2,11 +2,11 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_INCOMINGCONN_H
-#define BTCNET_INCOMINGCONN_H
+#ifndef LIBBTCNET_SRC_INCOMINGCONN_H
+#define LIBBTCNET_SRC_INCOMINGCONN_H
 
-#include "connectionbase.h"
 #include "bareconn.h"
+#include "connectionbase.h"
 
 class CConnection;
 struct evconnlistener;
@@ -28,4 +28,4 @@ private:
     sockaddr_storage m_addr;
 };
 
-#endif // BTCNET_INCOMINGCONN_H
+#endif // LIBBTCNET_SRC_INCOMINGCONN_H

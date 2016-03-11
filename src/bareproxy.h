@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_BAREPROXY_H
-#define BTCNET_BAREPROXY_H
+#ifndef LIBBTCNET_SRC_BAREPROXY_H
+#define LIBBTCNET_SRC_BAREPROXY_H
 
 #include "eventtypes.h"
 
@@ -34,10 +34,10 @@ private:
     static void receive_init(bufferevent* bev, void* ctx);
     static void check_auth_response(bufferevent* bev, void* ctx);
     static void read_final(bufferevent* bev, void* ctx);
-    static void event_cb(bufferevent*, short events, void* ctx);
+    static void event_cb(bufferevent* /*unused*/, short events, void* ctx);
 
     const CConnection& m_proxy_connection;
     event_type<bufferevent> m_bev;
 };
 
-#endif // BTCNET_BAREPROXY_H
+#endif // LIBBTCNET_SRC_BAREPROXY_H

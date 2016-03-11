@@ -2,11 +2,11 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_DNSCONN_H
-#define BTCNET_DNSCONN_H
+#ifndef LIBBTCNET_SRC_DNSCONN_H
+#define LIBBTCNET_SRC_DNSCONN_H
 
-#include "connectionbase.h"
 #include "bareconn.h"
+#include "connectionbase.h"
 #include "resolve.h"
 
 class CConnection;
@@ -24,9 +24,9 @@ public:
 
 protected:
     void OnConnectSuccess(event_type<bufferevent>&& bev) final;
-    void OnConnectFailure(short type, int error) final;
+    void OnConnectFailure(short event, int error) final;
     void OnResolveSuccess(CDNSResponse&& response) final;
-    void OnResolveFailure(int result) final;
+    void OnResolveFailure(int error) final;
 
 private:
     void DoResolve();
@@ -38,4 +38,4 @@ private:
     const event_type<evdns_base>& m_dns_base;
 };
 
-#endif // BTCNET_DNSCONN_H
+#endif // LIBBTCNET_SRC_DNSCONN_H

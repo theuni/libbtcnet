@@ -4,32 +4,25 @@
 
 #include "bareconn.h"
 #include "eventtypes.h"
-
+#include <assert.h>
 #include <event2/event.h>
 #include <event2/bufferevent.h>
 #include <event2/util.h>
-#include <assert.h>
 #include <functional>
 
-CBareConnection::CBareConnection()
-{
-}
-
-CBareConnection::~CBareConnection()
-{
-}
+CBareConnection::~CBareConnection() = default;
 
 void CBareConnection::conn_event(bufferevent* bev, short event, void* ctx)
 {
     assert(bev != nullptr);
     assert(ctx != nullptr);
     CBareConnection* data = static_cast<CBareConnection*>(ctx);
-    if (event & BEV_EVENT_CONNECTED)
+    if ((event & BEV_EVENT_CONNECTED) != 0)
         data->OnConnectSuccess(std::move(data->m_bev));
     else {
         evutil_socket_t sock = bufferevent_getfd(bev);
-        (void)sock;
         assert(sock != -1);
+        (void)sock;
         int error = evutil_socket_geterror(sock);
         data->m_bev.free();
         data->OnConnectFailure(event, error);
@@ -47,8 +40,10 @@ void CBareConnection::BareConnect(const event_type<event_base>& base, int bev_op
     int ret;
     ret = bufferevent_disable(m_bev, EV_READ | EV_WRITE);
     assert(ret == 0);
+    (void)ret;
     ret = bufferevent_set_timeouts(m_bev, &connTimeout, &connTimeout);
     assert(ret == 0);
+    (void)ret;
     bufferevent_setcb(m_bev, nullptr, nullptr, conn_event, this);
     bufferevent_socket_connect(m_bev, addr, addrlen);
 }

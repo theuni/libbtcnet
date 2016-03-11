@@ -2,12 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_PROXYCONN_H
-#define BTCNET_PROXYCONN_H
+#ifndef LIBBTCNET_SRC_PROXYCONN_H
+#define LIBBTCNET_SRC_PROXYCONN_H
 
-#include "connectionbase.h"
 #include "bareconn.h"
 #include "bareproxy.h"
+#include "connectionbase.h"
 
 class CConnection;
 struct event_base;
@@ -24,12 +24,12 @@ public:
 
 protected:
     void OnConnectSuccess(event_type<bufferevent>&& bev) final;
-    void OnConnectFailure(short type, int error) final;
-    void OnProxyFailure(int error) final;
+    void OnConnectFailure(short event, int error) final;
+    void OnProxyFailure(int event) final;
     void OnProxySuccess(event_type<bufferevent>&& bev, CConnection resolved) final;
 
 private:
     int m_retries;
 };
 
-#endif // BTCNET_PROXYCONN_H
+#endif // LIBBTCNET_SRC_PROXYCONN_H

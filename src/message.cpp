@@ -21,7 +21,7 @@ static inline uint64_t get_message_length(const unsigned char* buf)
            static_cast<const uint64_t>(buf[2]) << 16 |
            static_cast<const uint64_t>(buf[3]) << 24;
 }
-} // anon namespace
+} // namespace
 
 uint64_t first_complete_message_size(const CNetworkConfig& config, evbuffer* input, bool& fComplete, bool& fBadMsgStart)
 {
@@ -34,7 +34,7 @@ uint64_t first_complete_message_size(const CNetworkConfig& config, evbuffer* inp
     // Assume 4-bytes until there's a reason not to.
     assert(config.header_msg_size_size == 4);
 
-    if (nTotal < (size_t)size_needed)
+    if (nTotal < static_cast<size_t>(size_needed))
         return 0;
     evbuffer_iovec v;
     if (evbuffer_peek(input, size_needed, nullptr, &v, 1) == 1) {

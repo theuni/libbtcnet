@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_RESOLVE_H
-#define BTCNET_RESOLVE_H
+#ifndef LIBBTCNET_SRC_RESOLVE_H
+#define LIBBTCNET_SRC_RESOLVE_H
 
 #include "eventtypes.h"
 #include <event2/util.h>
@@ -29,10 +29,10 @@ public:
     };
 
     CDNSResponse();
-    CDNSResponse(CDNSResponse&&) noexcept;
+    CDNSResponse(CDNSResponse&& rhs) noexcept;
     CDNSResponse(const CDNSResponse&) = delete;
     CDNSResponse& operator=(const CDNSResponse&) = delete;
-    CDNSResponse& operator=(CDNSResponse&&) noexcept;
+    CDNSResponse& operator=(CDNSResponse&& rhs) noexcept;
     explicit CDNSResponse(evutil_addrinfo* ai);
     ~CDNSResponse();
     void clear();
@@ -47,7 +47,6 @@ private:
 class CDNSResolve
 {
 protected:
-    CDNSResolve();
     virtual ~CDNSResolve();
     virtual void OnResolveSuccess(CDNSResponse&& response) = 0;
     virtual void OnResolveFailure(int result) = 0;
@@ -57,4 +56,4 @@ private:
     static void dns_callback(int result, evutil_addrinfo* ai, void* ctx);
 };
 
-#endif // BTCNET_RESOLVE_H
+#endif // LIBBTCNET_SRC_RESOLVE_H

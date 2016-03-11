@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_CONNECTION_H
-#define BTCNET_CONNECTION_H
+#ifndef LIBBTCNET_CONNECTION_H
+#define LIBBTCNET_CONNECTION_H
 
 #include "networkconfig.h"
 
@@ -15,8 +15,8 @@ struct sockaddr;
 class CConnectionBase
 {
 protected:
-    CConnectionBase(const sockaddr* addr, int socksize_in);
-    CConnectionBase(std::string addr, unsigned short port);
+    CConnectionBase(const sockaddr* addrIn, int addrlen);
+    CConnectionBase(std::string hostIn, unsigned short portIn);
     CConnectionBase();
 
 public:
@@ -38,7 +38,7 @@ private:
 class CProxyAuth
 {
 public:
-    CProxyAuth(std::string username, std::string password);
+    CProxyAuth(std::string usernameIn, std::string passwordIn);
     CProxyAuth();
     bool IsSet() const;
     const std::string& GetUsername() const;
@@ -56,8 +56,8 @@ public:
     enum Type {
         SOCKS5 = 1 << 0
     };
-    CProxy(sockaddr* proxyaddr, int proxysocksize, Type proxytype, CProxyAuth auth = CProxyAuth());
-    CProxy(std::string proxyhost, unsigned short proxyport, Type proxytype, CProxyAuth auth = CProxyAuth());
+    CProxy(sockaddr* addrIn, int socksize, Type proxytype, CProxyAuth authIn = CProxyAuth());
+    CProxy(std::string hostIn, unsigned short portIn, Type proxytype, CProxyAuth authIn = CProxyAuth());
     CProxy();
     const CProxyAuth& GetAuth() const;
     Type GetType() const;
@@ -128,4 +128,4 @@ private:
     CNetworkConfig netConfig;
 };
 
-#endif // BTCNET_CONNECTION_H
+#endif // LIBBTCNET_CONNECTION_H

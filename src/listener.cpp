@@ -60,7 +60,7 @@ void CConnListener::Unbind()
     m_listener.free();
 }
 
-void CConnListener::listen_error_cb(evconnlistener* listener, void* ctx)
+void CConnListener::listen_error_cb(evconnlistener* /*unused*/, void* ctx)
 {
     assert(ctx != nullptr);
     CConnListener* bind = static_cast<CConnListener*>(ctx);
@@ -68,7 +68,7 @@ void CConnListener::listen_error_cb(evconnlistener* listener, void* ctx)
     bind->m_handler.OnListenFailure(bind->m_id, bind->m_connection);
 }
 
-void CConnListener::accept_conn(evconnlistener*, evutil_socket_t fd, sockaddr* address, int socklen, void* ctx)
+void CConnListener::accept_conn(evconnlistener* /*unused*/, evutil_socket_t fd, sockaddr* address, int socklen, void* ctx)
 {
     assert(ctx != nullptr);
     CConnListener* bind = static_cast<CConnListener*>(ctx);

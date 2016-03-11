@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_LOGGER_H
-#define BTCNET_LOGGER_H
+#ifndef LIBBTCNET_SRC_LOGGER_H
+#define LIBBTCNET_SRC_LOGGER_H
 #include <iostream>
 
 #if !defined(LOGLEVEL)
@@ -37,7 +37,7 @@ struct mylogger {
         }
     }
 };
-}
+} // namespace logger
 #ifndef NDEBUG
 #define DEBUG_PRINT(MYLEVEL, ...) logger::mylogger<logger::loglevel::MYLEVEL>::log(__func__, __VA_ARGS__);
 #else

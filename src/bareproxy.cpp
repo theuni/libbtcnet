@@ -22,9 +22,7 @@ CBareProxy::CBareProxy(const CConnection& conn)
 {
 }
 
-CBareProxy::~CBareProxy()
-{
-}
+CBareProxy::~CBareProxy() = default;
 
 void CBareProxy::InitProxy(event_type<bufferevent>&& bev)
 {
@@ -81,22 +79,22 @@ bool CBareProxy::writeproto(bufferevent* bev, const CConnection& conn)
         sockaddr_storage sock;
         memset(&sock, 0, sizeof(sock));
         int socksize = sizeof(sock);
-        conn.GetSockAddr((sockaddr*)&sock, &socksize);
+        conn.GetSockAddr(reinterpret_cast<sockaddr*>(&sock), &socksize);
         if (sock.ss_family == AF_INET6) {
             assert((size_t)socksize >= sizeof(sockaddr_in6));
-            in6_addr addr = ((sockaddr_in6*)&sock)->sin6_addr;
-            port = ((sockaddr_in6*)&sock)->sin6_port;
+            in6_addr addr = reinterpret_cast<sockaddr_in6*>(&sock)->sin6_addr;
+            port = reinterpret_cast<sockaddr_in6*>(&sock)->sin6_port;
             vSocks5.push_back(0x04); // ATYP IPV6
             vSocks5.insert(vSocks5.end(), addr.s6_addr, addr.s6_addr + sizeof(addr.s6_addr));
-            vSocks5.insert(vSocks5.end(), (unsigned char*)&port, (unsigned char*)&port + sizeof(port));
+            vSocks5.insert(vSocks5.end(), reinterpret_cast<unsigned char*>(&port), reinterpret_cast<unsigned char*>(&port) + sizeof(port));
             assert(vSocks5.size() == 22);
         } else if (sock.ss_family == AF_INET) {
             assert((size_t)socksize >= sizeof(sockaddr_in));
-            in_addr addr = ((sockaddr_in*)&sock)->sin_addr;
-            port = ((sockaddr_in*)&sock)->sin_port;
+            in_addr addr = reinterpret_cast<sockaddr_in*>(&sock)->sin_addr;
+            port = reinterpret_cast<sockaddr_in*>(&sock)->sin_port;
             vSocks5.push_back(0x01); // ATYP IPV4
-            vSocks5.insert(vSocks5.end(), (unsigned char*)&addr, (unsigned char*)&addr + sizeof(addr));
-            vSocks5.insert(vSocks5.end(), (unsigned char*)&port, (unsigned char*)&port + sizeof(port));
+            vSocks5.insert(vSocks5.end(), reinterpret_cast<unsigned char*>(&addr), reinterpret_cast<unsigned char*>(&addr) + sizeof(addr));
+            vSocks5.insert(vSocks5.end(), reinterpret_cast<unsigned char*>(&port), reinterpret_cast<unsigned char*>(&port) + sizeof(port));
             assert(vSocks5.size() == 10);
         } else
             return false;
@@ -135,6 +133,7 @@ void CBareProxy::read_final(bufferevent* bev, void* ctx)
     char pchRet2[5] = {};
     result = evbuffer_copyout(input, pchRet2, sizeof(pchRet2));
     assert(result == sizeof(pchRet2));
+    (void)result;
     if (pchRet2[0] != 0x05 || pchRet2[1] != 0x00) {
         data->ProxyFailure(0);
         return;
@@ -151,15 +150,15 @@ void CBareProxy::read_final(bufferevent* bev, void* ctx)
         addrsize = 4;
         addr.ss_family = AF_INET;
         sockaddr_size = sizeof(sockaddr_in);
-        ((sockaddr_in*)&addr)->sin_port = htons(conn.GetPort());
-        writeip = &((sockaddr_in*)&addr)->sin_addr;
+        reinterpret_cast<sockaddr_in*>(&addr)->sin_port = htons(conn.GetPort());
+        writeip = &(reinterpret_cast<sockaddr_in*>(&addr)->sin_addr);
         break;
     case 0x04:
         addrsize = 16;
         addr.ss_family = AF_INET6;
         sockaddr_size = sizeof(sockaddr_in6);
-        ((sockaddr_in6*)&addr)->sin6_port = htons(conn.GetPort());
-        writeip = &((sockaddr_in6*)&addr)->sin6_addr;
+        reinterpret_cast<sockaddr_in6*>(&addr)->sin6_port = htons(conn.GetPort());
+        writeip = &(reinterpret_cast<sockaddr_in6*>(&addr)->sin6_addr);
         break;
     case 0x03:
         addrsize = pchRet2[4];
@@ -182,20 +181,24 @@ void CBareProxy::read_final(bufferevent* bev, void* ctx)
     if (ip) {
         result = evbuffer_drain(input, 4);
         assert(result == 0);
+        (void)result;
         result = evbuffer_remove(input, writeip, addrsize);
         assert(result == (int)addrsize);
+        (void)result;
         // Throw this away.
         char port[2] = {};
         result = evbuffer_remove(input, port, sizeof(port));
         assert(result == sizeof(port));
+        (void)result;
     } else {
         result = evbuffer_drain(input, 5 + addrsize + 2);
         assert(result == 0);
+        (void)result;
     }
 
     CConnection ret = conn;
     if (ip && conn.IsDNS() && conn.GetOptions().doResolve == CConnectionOptions::RESOLVE_ONLY)
-        ret = CConnection(conn.GetOptions(), conn.GetNetConfig(), conn.GetProxy(), (sockaddr*)&addr, sockaddr_size);
+        ret = CConnection(conn.GetOptions(), conn.GetNetConfig(), conn.GetProxy(), reinterpret_cast<sockaddr*>(&addr), sockaddr_size);
     data->OnProxySuccess(std::move(data->m_bev), std::move(ret));
 }
 
@@ -252,9 +255,9 @@ void CBareProxy::receive_init(bufferevent* bev, void* ctx)
     }
 }
 
-void CBareProxy::event_cb(bufferevent* bev, short events, void* ctx)
+void CBareProxy::event_cb(bufferevent* /*unused*/, short events, void* ctx)
 {
-    if (events & BEV_EVENT_ERROR || events & BEV_EVENT_EOF || events & BEV_EVENT_TIMEOUT || events & BEV_EVENT_CONNECTED) {
+    if (((events & BEV_EVENT_ERROR) != 0) || ((events & BEV_EVENT_EOF) != 0) || ((events & BEV_EVENT_TIMEOUT) != 0) || ((events & BEV_EVENT_CONNECTED) != 0)) {
         CBareProxy* data = static_cast<CBareProxy*>(ctx);
         data->ProxyFailure(0);
     }

@@ -2,22 +2,20 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_HANDLERINT_H
-#define BTCNET_HANDLERINT_H
+#ifndef LIBBTCNET_SRC_HANDLER_H
+#define LIBBTCNET_SRC_HANDLER_H
 
 #include "libbtcnet/handler.h"
 #include "threads.h"
 #include "event.h"
 
-#include <event2/util.h>
 #include <event2/bufferevent.h>
-
+#include <event2/util.h>
 #include <map>
-#include <vector>
-#include <list>
-#include <stdint.h>
-#include <stddef.h>
 #include <memory>
+#include <stddef.h>
+#include <stdint.h>
+#include <vector>
 
 #ifndef NO_THREADS
 #include <thread>
@@ -69,7 +67,7 @@ public:
     const event_type<event_base>& GetEventBase() const;
 
 private:
-    bool OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> > msgs, size_t totalsize);
+    bool OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> >&& msgs, size_t totalsize);
     void OnIncomingConnected(ConnID id, const CConnection& conn, const CConnection& resolved_conn);
     void OnOutgoingConnected(ConnID id, const CConnection& conn, const CConnection& resolved_conn);
     void OnConnectionFailure(ConnID id, ConnectionFailureType type, int error, CConnection failed, bool retry);
@@ -77,7 +75,7 @@ private:
     void OnWriteBufferReady(ConnID id, size_t bufsize);
     void OnResolveComplete(ConnID id, const CConnection& conn, std::list<CConnection> resolved);
     void OnResolveFailure(ConnID id, const CConnection& conn, int error, bool retry);
-    void OnIncomingConnection(const CConnection& bind, evutil_socket_t fd, sockaddr* address, int socklen);
+    void OnIncomingConnection(const CConnection& bind, evutil_socket_t sock, sockaddr* address, int socklen);
     void OnListenFailure(ConnID id, const CConnection& bind);
     void OnDisconnected(ConnID id, bool reconnect);
 
@@ -128,4 +126,4 @@ private:
     CEvent m_shutdown_event;
 };
 
-#endif // BTCNET_HANDLERINT_H
+#endif // LIBBTCNET_SRC_HANDLER_H

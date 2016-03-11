@@ -42,7 +42,7 @@ void CResolveOnly::Resolve()
 void CResolveOnly::OnResolveFailure(int error)
 {
     m_request.reset();
-    m_handler.OnResolveFailure(m_id, m_connection, error, m_retries > 0 ? m_retries-- : m_retries != 0);
+    m_handler.OnResolveFailure(m_id, m_connection, error, m_retries > 0 ? m_retries-- != 0 : m_retries != 0);
 }
 
 void CResolveOnly::OnResolveSuccess(CDNSResponse&& response)

@@ -7,8 +7,8 @@
 #include <event2/util.h>
 
 #include <string.h>
-#include <string>
 #include <assert.h>
+#include <string>
 
 
 #if defined(_WIN32)
@@ -78,20 +78,20 @@ CConnectionBase::CConnectionBase(std::string hostIn, unsigned short portIn)
         return;
     }
 
-    if (evutil_parse_sockaddr_port(host.c_str(), (sockaddr*)&saddr, &addrsize) == 0) {
+    if (evutil_parse_sockaddr_port(host.c_str(), reinterpret_cast<sockaddr*>(&saddr), &addrsize) == 0) {
         unsigned short* pport = nullptr;
         if (saddr.ss_family == AF_INET) {
-            pport = &((sockaddr_in*)&saddr)->sin_port;
+            pport = &(reinterpret_cast<sockaddr_in*>(&saddr)->sin_port);
 
         } else if (saddr.ss_family == AF_INET6) {
-            pport = &((sockaddr_in6*)&saddr)->sin6_port;
+            pport = &(reinterpret_cast<sockaddr_in6*>(&saddr)->sin6_port);
         }
-        if (pport && *pport == 0)
+        if ((pport != nullptr) && *pport == 0)
             *pport = ntohs(portIn);
         host.clear();
         port = 0;
         isDns = false;
-        addr.assign((unsigned char*)&saddr, (unsigned char*)&saddr + addrsize);
+        addr.assign(reinterpret_cast<unsigned char*>(&saddr), reinterpret_cast<unsigned char*>(&saddr) + addrsize);
     } else {
         size_t colon = host.find_last_of(':');
         bool fHaveColon = colon != host.npos;
@@ -124,7 +124,7 @@ bool CConnectionBase::IsDNS() const
 
 bool CConnectionBase::GetSockAddr(sockaddr* paddr, int* addrlen) const
 {
-    if (!addr.empty() && addrlen && (size_t)*addrlen >= addr.size()) {
+    if (!addr.empty() && (addrlen != nullptr) && static_cast<size_t>(*addrlen) >= addr.size()) {
         memcpy(paddr, &addr[0], addr.size());
         *addrlen = addr.size();
     }
@@ -140,7 +140,7 @@ std::string CConnectionBase::GetHost() const
         sockaddr_storage addr_stor;
         memset(&addr_stor, 0, sizeof(addr_stor));
         memcpy(&addr_stor, addr.data(), addr.size());
-        if (getnameinfo((sockaddr*)&addr_stor, addr.size(), hostbuf, sizeof(hostbuf), nullptr, 0, NI_NUMERICHOST) == 0)
+        if (getnameinfo(reinterpret_cast<sockaddr*>(&addr_stor), addr.size(), hostbuf, sizeof(hostbuf), nullptr, 0, NI_NUMERICHOST) == 0)
             return std::string(hostbuf);
     }
     return std::string();
@@ -156,11 +156,11 @@ unsigned short CConnectionBase::GetPort() const
     unsigned short ret = 0;
     sockaddr_storage storage;
     memcpy(&storage, &addr[0], addr.size());
-    sockaddr* saddr = (sockaddr*)&storage;
+    sockaddr* saddr = reinterpret_cast<sockaddr*>(&storage);
     if (saddr->sa_family == AF_INET)
-        ret = ((sockaddr_in*)&storage)->sin_port;
+        ret = reinterpret_cast<sockaddr_in*>(&storage)->sin_port;
     else if (saddr->sa_family == AF_INET6)
-        ret = ((sockaddr_in6*)&storage)->sin6_port;
+        ret = reinterpret_cast<sockaddr_in6*>(&storage)->sin6_port;
     return ntohs(ret);
 }
 
@@ -188,22 +188,22 @@ CConnection::CConnection()
 }
 
 CConnection::CConnection(CConnectionOptions optsIn, CNetworkConfig netConfigIn, const sockaddr* addr, int socksize)
-    : CConnectionBase(addr, socksize), opts(std::move(optsIn)), netConfig(std::move(netConfigIn))
+    : CConnectionBase(addr, socksize), opts(optsIn), netConfig(std::move(netConfigIn))
 {
 }
 
 CConnection::CConnection(CConnectionOptions optsIn, CNetworkConfig netConfigIn, CProxy proxyIn, const sockaddr* addr, int socksize)
-    : CConnectionBase(addr, socksize), proxy(std::move(proxyIn)), opts(std::move(optsIn)), netConfig(std::move(netConfigIn))
+    : CConnectionBase(addr, socksize), proxy(std::move(proxyIn)), opts(optsIn), netConfig(std::move(netConfigIn))
 {
 }
 
 CConnection::CConnection(CConnectionOptions optsIn, CNetworkConfig netConfigIn, std::string addr, unsigned short port)
-    : CConnectionBase(std::move(addr), port), opts(std::move(optsIn)), netConfig(std::move(netConfigIn))
+    : CConnectionBase(std::move(addr), port), opts(optsIn), netConfig(std::move(netConfigIn))
 {
 }
 
 CConnection::CConnection(CConnectionOptions optsIn, CNetworkConfig netConfigIn, CProxy proxyIn, std::string addr, unsigned short port)
-    : CConnectionBase(std::move(addr), port), proxy(std::move(proxyIn)), opts(std::move(optsIn)), netConfig(std::move(netConfigIn))
+    : CConnectionBase(std::move(addr), port), proxy(std::move(proxyIn)), opts(optsIn), netConfig(std::move(netConfigIn))
 {
 }
 

@@ -2,12 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BTCNET_EVENT_H
-#define BTCNET_EVENT_H
+#ifndef LIBBTCNET_SRC_EVENT_H
+#define LIBBTCNET_SRC_EVENT_H
 
+#include "eventtypes.h"
 #include <event2/util.h>
 #include <functional>
-#include "eventtypes.h"
 
 struct event;
 struct event_base;
@@ -28,7 +28,7 @@ public:
     operator bool() const;
 
 private:
-    static void callback(evutil_socket_t, short, void* ctx);
+    static void callback(evutil_socket_t, short /*unused*/, void* ctx);
     std::function<void()> m_func;
     event_type<event> m_event;
 

@@ -4,10 +4,9 @@
 
 #include "handler.h"
 
-#include "libbtcnet/handler.h"
 #include "libbtcnet/connection.h"
+#include "libbtcnet/handler.h"
 
-#include "threads.h"
 #include "eventtypes.h"
 #include "logger.h"
 #include "listener.h"
@@ -16,10 +15,11 @@
 #include "dnsconn.h"
 #include "resolveonly.h"
 #include "proxyconn.h"
+#include "threads.h"
 
-#include <event2/event.h>
 #include <event2/bufferevent.h>
 #include <event2/dns.h>
+#include <event2/event.h>
 #include <event2/util.h>
 
 #include <assert.h>
@@ -42,11 +42,10 @@ CConnectionHandlerInt::CConnectionHandlerInt(CConnectionHandler& handler, bool e
     if (m_enable_threading)
         result = setup_threads();
     assert(result);
+    (void)result;
 }
 
-CConnectionHandlerInt::~CConnectionHandlerInt()
-{
-}
+CConnectionHandlerInt::~CConnectionHandlerInt() = default;
 
 void CConnectionHandlerInt::Start(int outgoing_limit)
 {
@@ -70,18 +69,21 @@ void CConnectionHandlerInt::Start(int outgoing_limit)
     event_type<event_config> cfg(event_config_new());
     result = event_config_set_flag(cfg, EVENT_BASE_FLAG_EPOLL_USE_CHANGELIST);
     assert(result == 0);
+    (void)result;
 
     m_event_base = event_base_new_with_config(cfg);
 
     if (m_enable_threading) {
         result = enable_threads_for_handler(m_event_base);
         assert(result == 0);
+        (void)result;
     }
     cfg.free();
 
     m_dns_base = evdns_base_new(m_event_base, 1);
     result = evdns_base_set_option(m_dns_base, "randomize-case", "0");
     assert(result == 0);
+    (void)result;
 
     m_request_event.reset(m_event_base, EV_PERSIST, std::bind(&CConnectionHandlerInt::RequestOutgoingInt, this));
     m_shutdown_event.reset(m_event_base, 0, std::bind(&CConnectionHandlerInt::ShutdownInt, this));
@@ -178,18 +180,18 @@ bool CConnectionHandlerInt::IsEventThread() const
 #endif
 }
 
-void CConnectionHandlerInt::SetSocketOpts(sockaddr* addr, int, evutil_socket_t sock)
+void CConnectionHandlerInt::SetSocketOpts(sockaddr* addr, int /*unused*/, evutil_socket_t sock)
 {
     evutil_make_socket_nonblocking(sock);
-    int set = 1;
+    const int set = 1;
 #ifdef _WIN32
-    typedef char* sockoptptr;
+    typedef const char sockoptptr;
 #else
-    typedef void* sockoptptr;
+    typedef const void sockoptptr;
 #endif
 
     if (addr->sa_family == AF_INET || addr->sa_family == AF_INET6)
-        setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (sockoptptr)&set, sizeof(int));
+        setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, static_cast<sockoptptr*>(&set), sizeof(int));
 }
 
 void CConnectionHandlerInt::OnResolveComplete(ConnID id, const CConnection& conn, std::list<CConnection, std::allocator<CConnection> > resolved)
@@ -199,7 +201,7 @@ void CConnectionHandlerInt::OnResolveComplete(ConnID id, const CConnection& conn
     m_dns_resolves.erase(id);
 }
 
-void CConnectionHandlerInt::OnResolveFailure(ConnID id, const CConnection& conn, int error, bool retry)
+void CConnectionHandlerInt::OnResolveFailure(ConnID id, const CConnection& conn, int /*error*/, bool retry)
 {
     assert(IsEventThread());
     retry = retry && !m_shutdown;
@@ -268,7 +270,7 @@ void CConnectionHandlerInt::OnListenFailure(ConnID id, const CConnection& bind)
     m_binds.erase(id);
 }
 
-void CConnectionHandlerInt::OnConnectionFailure(ConnID id, ConnectionFailureType type, int error, CConnection failed, bool retry)
+void CConnectionHandlerInt::OnConnectionFailure(ConnID id, ConnectionFailureType type, int /*error*/, CConnection failed, bool retry)
 {
     assert(IsEventThread());
     auto it = m_connecting.find(id);
@@ -277,9 +279,9 @@ void CConnectionHandlerInt::OnConnectionFailure(ConnID id, ConnectionFailureType
     m_connecting.erase(it);
     retry = retry && !m_shutdown;
 
-    if (type & ConnectionFailureType::PROXY)
+    if ((type & ConnectionFailureType::PROXY) != 0)
         m_interface.OnProxyFailure(failed, retry);
-    else if (type & ConnectionFailureType::RESOLVE)
+    else if ((type & ConnectionFailureType::RESOLVE) != 0)
         m_interface.OnDnsFailure(std::move(failed), retry);
     else
         m_interface.OnConnectionFailure(failed, failed, retry);
@@ -332,7 +334,7 @@ void CConnectionHandlerInt::OnOutgoingConnected(ConnID id, const CConnection& co
     m_interface.OnReadyForFirstSend(id);
 }
 
-bool CConnectionHandlerInt::OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> > msgs, size_t totalsize)
+bool CConnectionHandlerInt::OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> >&& msgs, size_t totalsize)
 {
     assert(IsEventThread());
     return m_interface.OnReceiveMessages(id, std::move(msgs), totalsize);
@@ -386,13 +388,13 @@ void CConnectionHandlerInt::StartConnection(CConnection&& conn)
 bufferevent_options CConnectionHandlerInt::GetBevOpts() const
 {
     assert(IsEventThread());
-    return m_enable_threading == true ? bufferevent_options(BEV_OPT_THREADSAFE | BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS) : bufferevent_options(BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
+    return m_enable_threading ? bufferevent_options(BEV_OPT_THREADSAFE | BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS | BEV_OPT_UNLOCK_CALLBACKS) : bufferevent_options(BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 }
 
 void CConnectionHandlerInt::RequestOutgoingInt()
 {
     assert(IsEventThread());
-    size_t need = (size_t)std::min(g_max_simultaneous_connecting, m_outgoing_conn_limit - m_outgoing_conn_count - (int)m_connecting.size());
+    size_t need = static_cast<size_t>(std::min(g_max_simultaneous_connecting, m_outgoing_conn_limit - m_outgoing_conn_count - static_cast<int>(m_connecting.size())));
     if (need > 0) {
         std::list<CConnection> conns(m_interface.OnNeedOutgoingConnections(need));
         auto end = conns.begin();

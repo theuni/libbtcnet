@@ -59,7 +59,7 @@ void CEvent::add(const timeval& tv)
     event_add(m_event, &tv);
 }
 
-void CEvent::callback(evutil_socket_t, short, void* ctx)
+void CEvent::callback(evutil_socket_t, short /*unused*/, void* ctx)
 {
     assert(ctx != nullptr);
     CEvent* obj = static_cast<CEvent*>(ctx);
