@@ -53,3 +53,6 @@ $(MULTINET): $(MULTINET_OBJS) $(LIBBTCNET)
 
 clean:
 	-rm -f $(OBJS) $(LIBS) $(PROGS)
+
+tidy:
+	@clang-tidy $(LIB_OBJS:.o=.cpp) -- $(CPPFLAGS)
