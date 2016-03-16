@@ -32,7 +32,7 @@ AR=ar
 CXX=c++
 CPPFLAGS=-Iinclude -I.
 CXXFLAGS=-O2 -g -Wall -Wextra -Wno-unused-parameter
-LDFLAGS=-Wl,--as-needed -levent_core -levent_pthreads -levent_extra
+LDFLAGS=-levent_core -levent_pthreads -levent_extra
 
 CPPFLAGS += -std=c++11
 

@@ -5,6 +5,7 @@
 #include "bareconn.h"
 #include "eventtypes.h"
 #include <assert.h>
+#include <errno.h>
 #include <event2/event.h>
 #include <event2/bufferevent.h>
 #include <event2/util.h>
