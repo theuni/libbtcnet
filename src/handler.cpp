@@ -306,6 +306,7 @@ void CConnectionHandlerInt::OnIncomingConnected(ConnID id, const CConnection& co
     if (!m_interface.OnIncomingConnection(id, conn, resolved_conn))
         return;
     moved->SetRateLimitGroup(m_incoming_rate_limit);
+    moved->Enable();
     {
         optional_lock(m_conn_mutex, m_enable_threading);
         m_connected.emplace_hint(m_connected.end(), id, std::move(moved));
@@ -326,6 +327,7 @@ void CConnectionHandlerInt::OnOutgoingConnected(ConnID id, const CConnection& co
     if (!m_interface.OnOutgoingConnection(id, conn, resolved_conn))
         return;
     moved->SetRateLimitGroup(m_outgoing_rate_limit);
+    moved->Enable();
     {
         optional_lock(m_conn_mutex, m_enable_threading);
         m_connected.emplace_hint(m_connected.end(), id, std::move(moved));

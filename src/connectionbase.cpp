@@ -57,6 +57,11 @@ void ConnectionBase::UnpauseRecv()
     bufferevent_enable(m_bev, EV_READ);
 }
 
+void ConnectionBase::Enable()
+{
+    bufferevent_enable(m_bev, EV_READ | EV_WRITE);
+}
+
 void ConnectionBase::Retry(ConnID newId)
 {
     m_bev.free();
@@ -169,7 +174,7 @@ void ConnectionBase::OnOutgoingConnected(event_type<bufferevent>&& bev, CConnect
     InitConnection();
 
     m_handler.OnOutgoingConnected(m_id, m_connection, std::move(resolved));
-    bufferevent_enable(m_bev, EV_READ | EV_WRITE);
+    // Don't do anything after OnOutgoingConnected. It may delete *this.
 }
 
 void ConnectionBase::OnIncomingConnected(event_type<bufferevent>&& bev, sockaddr* addr, int addrsize)
@@ -180,7 +185,7 @@ void ConnectionBase::OnIncomingConnected(event_type<bufferevent>&& bev, sockaddr
     InitConnection();
 
     m_handler.OnIncomingConnected(m_id, m_connection, std::move(resolved));
-    bufferevent_enable(m_bev, EV_READ | EV_WRITE);
+    // Don't do anything after OnIncomingConnected. It may delete *this.
 }
 
 // May not be on main thread!

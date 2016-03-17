@@ -109,13 +109,10 @@ event_type<evdns_getaddrinfo_request> CDNSResolve::Resolve(const event_type<evdn
 {
     assert(host != nullptr);
     assert(port != nullptr);
-    evdns_getaddrinfo_request* req = evdns_getaddrinfo(dns_base, host, port, hints, dns_callback, this);
-
     // evdns_getaddrinfo may return NULL on success.
-    event_type<evdns_getaddrinfo_request> ret(nullptr);
-    if (req != nullptr)
-        ret = req;
-    return ret;
+    event_type<evdns_getaddrinfo_request> result;
+    result.reset(evdns_getaddrinfo(dns_base, host, port, hints, dns_callback, this));
+    return result;
 }
 
 void CDNSResolve::dns_callback(int result, evutil_addrinfo* ai, void* ctx)

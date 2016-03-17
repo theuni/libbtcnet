@@ -67,7 +67,7 @@ void CDNSConnection::OnResolveFailure(int error)
     assert(m_resolved.empty());
     assert(m_iter == m_resolved.end());
 
-    m_request.reset();
+    m_request.reset(nullptr);
     OnConnectionFailure(ConnectionFailureType::RESOLVE, error, m_connection, m_retries > 0 ? m_retries-- != 0 : m_retries != 0);
 }
 
@@ -76,7 +76,7 @@ void CDNSConnection::OnResolveSuccess(CDNSResponse&& response)
     assert(m_resolved.empty());
     assert(m_iter == m_resolved.end());
 
-    m_request.reset();
+    m_request.reset(nullptr);
     m_resolved = std::move(response);
     m_iter = m_resolved.begin();
     ConnectResolved();

@@ -29,6 +29,7 @@ public:
     virtual void Connect() = 0;
     virtual void Cancel() = 0;
     virtual bool IsOutgoing() const = 0;
+    void Enable();
     void Disconnect();
     void DisconnectWhenFinished();
     bool Write(const unsigned char* data, size_t size);

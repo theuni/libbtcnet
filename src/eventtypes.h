@@ -58,9 +58,9 @@ public:
         m_obj = nullptr;
     }
 
-    inline void reset()
+    inline void reset(T* rhs)
     {
-        m_obj = nullptr;
+        m_obj = rhs;
     }
 
     inline void swap(event_type& rhs)
@@ -116,7 +116,7 @@ public:
     {
         free();
         m_obj = rhs.m_obj;
-        rhs.reset();
+        rhs.reset(nullptr);
         return *this;
     }
     event_type& operator=(const event_type&) = delete;

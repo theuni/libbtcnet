@@ -31,6 +31,7 @@ bool CIncomingConn::IsOutgoing() const
 void CIncomingConn::Connect()
 {
     event_type<bufferevent> bev(bufferevent_socket_new(m_event_base, m_sock, m_handler.GetBevOpts()));
+    assert(bev);
     OnIncomingConnected(std::move(bev), reinterpret_cast<sockaddr*>(&m_addr), m_addrsize);
 }
 

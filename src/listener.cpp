@@ -38,9 +38,12 @@ bool CConnListener::Bind()
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
     m_connection.GetSockAddr(addr, &socklen);
 
-    m_listener = evconnlistener_new_bind(m_event_base, accept_conn, this, LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE, -1, addr, socklen);
-
-    return m_listener != nullptr;
+    m_listener.reset(evconnlistener_new_bind(m_event_base, accept_conn, this, LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE, -1, addr, socklen));
+    if (!m_listener) {
+        m_handler.OnListenFailure(m_id, m_connection);
+        return false;
+    }
+    return true;
 }
 
 bool CConnListener::Enable()

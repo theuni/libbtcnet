@@ -41,13 +41,13 @@ void CResolveOnly::Resolve()
 
 void CResolveOnly::OnResolveFailure(int error)
 {
-    m_request.reset();
+    m_request.reset(nullptr);
     m_handler.OnResolveFailure(m_id, m_connection, error, m_retries > 0 ? m_retries-- != 0 : m_retries != 0);
 }
 
 void CResolveOnly::OnResolveSuccess(CDNSResponse&& response)
 {
-    m_request.reset();
+    m_request.reset(nullptr);
     std::list<CConnection> connections;
     for (auto it = response.begin(); it != response.end(); ++it)
         connections.emplace_back(m_connection.GetOptions(), m_connection.GetNetConfig(), it->ai_addr, it->ai_addrlen);
