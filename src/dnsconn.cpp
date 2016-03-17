@@ -102,7 +102,7 @@ void CDNSConnection::OnConnectFailure(short event, int /*error*/)
     assert(!m_resolved.empty());
 
     CConnection resolved(m_connection.GetOptions(), m_connection.GetNetConfig(), m_iter->ai_addr, m_iter->ai_addrlen);
-    if(++m_iter == m_resolved.end())
+    if (++m_iter == m_resolved.end())
         m_resolved.clear();
     OnConnectionFailure(ConnectionFailureType::CONNECT, event, std::move(resolved), m_iter != m_resolved.end() || m_retries != 0);
 }
