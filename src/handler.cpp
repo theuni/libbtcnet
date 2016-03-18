@@ -495,5 +495,6 @@ void CConnectionHandlerInt::SetOutgoingRateLimit(const CRateLimit& limit)
 
 void CConnectionHandlerInt::Shutdown()
 {
+    assert(m_shutdown_event);
     m_shutdown_event.active();
 }
