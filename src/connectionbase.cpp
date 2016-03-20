@@ -159,12 +159,18 @@ void ConnectionBase::InitConnection()
     bufferevent_setwatermark(m_bev, EV_READ, 0, 0);
     bufferevent_setwatermark(m_bev, EV_WRITE, opts.nMaxSendBuffer, 0);
 
+    // Don't set the regular callbacks yet. Before any data is sent/received,
+    // The initial timeout is in effect. first_read_cb/first_write_cb
+    // (whichever is hit first) will set the non-initial-timeout callbacks.
+    bufferevent_setcb(m_bev, first_read_cb, first_write_cb, event_cb, this);
+
+    // Add an additional set of callbacks responsible for reporting _all_
+    // socket reads/writes, as opposed to the bufferevent read callback, which
+    // has a watermark set.
     evbuffer* input = bufferevent_get_input(m_bev);
     evbuffer* output = bufferevent_get_output(m_bev);
-
     evbuffer_add_cb(input, read_data, this);
     evbuffer_add_cb(output, wrote_data, this);
-    bufferevent_setcb(m_bev, first_read_cb, first_write_cb, event_cb, this);
 }
 
 void ConnectionBase::OnOutgoingConnected(event_type<bufferevent>&& bev, CConnection resolved)
