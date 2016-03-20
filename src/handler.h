@@ -86,6 +86,7 @@ private:
     void StartConnection(CConnection&& conn);
     void SetSocketOpts(sockaddr* addr, int socksize, evutil_socket_t sock);
     bool IsEventThread() const;
+    ConnID GetNextConnectionIndex();
 
     std::map<ConnID, std::unique_ptr<ConnectionBase> > m_connected;
     std::map<ConnID, std::unique_ptr<ConnectionBase> > m_connecting;

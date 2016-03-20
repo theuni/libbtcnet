@@ -243,7 +243,7 @@ void CConnectionHandlerInt::OnDisconnected(ConnID id, bool reconnect)
 
     m_interface.OnDisconnected(id, reconnect);
     if (reconnect) {
-        ConnID newId = m_connection_index++;
+        ConnID newId = GetNextConnectionIndex();
         auto it = m_connecting.emplace_hint(m_connecting.end(), newId, std::move(moved));
         it->second->Retry(newId);
     } else if (m_request_event)
@@ -254,7 +254,7 @@ void CConnectionHandlerInt::OnIncomingConnection(const CConnection& bind, evutil
 {
     assert(IsEventThread());
 
-    ConnID id = m_connection_index++;
+    ConnID id = GetNextConnectionIndex();
     std::unique_ptr<ConnectionBase> ptr(new CIncomingConn(*this, bind, id, sock, address, socklen));
     {
         auto it = m_connecting.emplace_hint(m_connecting.end(), id, std::move(ptr));
@@ -286,7 +286,7 @@ void CConnectionHandlerInt::OnConnectionFailure(ConnID id, ConnectionFailureType
     else
         m_interface.OnConnectionFailure(failed, failed, retry);
     if (retry && !m_shutdown) {
-        ConnID newId = m_connection_index++;
+        ConnID newId = GetNextConnectionIndex();
         auto newit = m_connecting.emplace_hint(m_connecting.end(), newId, std::move(ptr));
         newit->second->Retry(newId);
     } else if (m_request_event)
@@ -351,7 +351,7 @@ void CConnectionHandlerInt::OnWriteBufferFull(ConnID id, size_t bufsize)
 bool CConnectionHandlerInt::Bind(CConnection conn)
 {
     assert(IsEventThread());
-    ConnID id = m_connection_index++;
+    ConnID id = GetNextConnectionIndex();
     std::unique_ptr<CConnListener> listener(new CConnListener(*this, m_event_base, id, std::move(conn)));
     bool ret = listener->Bind();
     if (ret) {
@@ -362,10 +362,19 @@ bool CConnectionHandlerInt::Bind(CConnection conn)
     return ret;
 }
 
+ConnID CConnectionHandlerInt::GetNextConnectionIndex()
+{
+    assert(m_connection_index >= 0);
+    if (m_connection_index != std::numeric_limits<decltype(m_connection_index)>::max())
+        return m_connection_index++;
+    m_connection_index = 0;
+    return std::numeric_limits<decltype(m_connection_index)>::max();
+}
+
 void CConnectionHandlerInt::StartConnection(CConnection&& conn)
 {
     assert(IsEventThread());
-    ConnID id = m_connection_index++;
+    ConnID id = GetNextConnectionIndex();
     if (conn.IsDNS() && conn.GetOptions().doResolve == CConnectionOptions::RESOLVE_ONLY) {
         if (conn.GetProxy().IsSet()) {
             /* TODO */
@@ -427,50 +436,60 @@ bool CConnectionHandlerInt::PumpEvents(bool block)
 
 void CConnectionHandlerInt::CloseConnection(ConnID id, bool immediately)
 {
-    optional_lock(m_conn_mutex, m_enable_threading);
-    auto it = m_connected.find(id);
-    if (it != m_connected.end()) {
-        if (immediately)
-            it->second->Disconnect();
-        else
-            it->second->DisconnectWhenFinished();
+    if (id >= 0) {
+        optional_lock(m_conn_mutex, m_enable_threading);
+        auto it = m_connected.find(id);
+        if (it != m_connected.end()) {
+            if (immediately)
+                it->second->Disconnect();
+            else
+                it->second->DisconnectWhenFinished();
+        }
     }
 }
 
 void CConnectionHandlerInt::PauseRecv(ConnID id)
 {
-    optional_lock(m_conn_mutex, m_enable_threading);
-    auto it = m_connected.find(id);
-    if (it != m_connected.end())
-        it->second->PauseRecv();
+    if (id >= 0) {
+        optional_lock(m_conn_mutex, m_enable_threading);
+        auto it = m_connected.find(id);
+        if (it != m_connected.end())
+            it->second->PauseRecv();
+    }
 }
 
 void CConnectionHandlerInt::UnpauseRecv(ConnID id)
 {
-    optional_lock(m_conn_mutex, m_enable_threading);
-    auto it = m_connected.find(id);
-    if (it != m_connected.end())
-        it->second->UnpauseRecv();
+    if (id >= 0) {
+        optional_lock(m_conn_mutex, m_enable_threading);
+        auto it = m_connected.find(id);
+        if (it != m_connected.end())
+            it->second->UnpauseRecv();
+    }
 }
 
 bool CConnectionHandlerInt::Send(ConnID id, const unsigned char* data, size_t size)
 {
-    optional_lock(m_conn_mutex, m_enable_threading);
-    auto it = m_connected.find(id);
-    bool ret;
-    if (it == m_connected.end())
-        ret = false;
-    else
-        ret = it->second->Write(data, size);
+    bool ret = false;
+    if (id >= 0) {
+        optional_lock(m_conn_mutex, m_enable_threading);
+        auto it = m_connected.find(id);
+        if (it == m_connected.end())
+            ret = false;
+        else
+            ret = it->second->Write(data, size);
+    }
     return ret;
 }
 
 void CConnectionHandlerInt::SetRateLimit(ConnID id, const CRateLimit& limit)
 {
-    optional_lock(m_conn_mutex, m_enable_threading);
-    auto it = m_connected.find(id);
-    if (it != m_connected.end())
-        it->second->SetRateLimit(limit);
+    if (id >= 0) {
+        optional_lock(m_conn_mutex, m_enable_threading);
+        auto it = m_connected.find(id);
+        if (it != m_connected.end())
+            it->second->SetRateLimit(limit);
+    }
 }
 
 void CConnectionHandlerInt::SetIncomingRateLimit(const CRateLimit& limit)

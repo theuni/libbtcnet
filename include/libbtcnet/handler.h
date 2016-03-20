@@ -18,7 +18,7 @@ struct CNodeMessages {
     size_t size;
 };
 
-typedef uint64_t ConnID;
+typedef int64_t ConnID;
 
 class CConnectionHandlerInt;
 struct CNetworkConfig;
