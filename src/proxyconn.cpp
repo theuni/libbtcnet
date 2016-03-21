@@ -29,7 +29,7 @@ void CProxyConn::Connect()
     const CConnectionOptions& opts = m_connection.GetOptions();
 
     timeval connTimeout;
-    connTimeout.tv_sec = opts.nInitialTimeout;
+    connTimeout.tv_sec = opts.nConnTimeout;
     connTimeout.tv_usec = 0;
 
     const CConnectionBase& proxy = m_connection.GetProxy();

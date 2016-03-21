@@ -113,7 +113,7 @@ void CDNSConnection::ConnectResolved()
     assert(!m_resolved.empty());
 
     timeval connTimeout;
-    connTimeout.tv_sec = m_connection.GetOptions().nInitialTimeout;
+    connTimeout.tv_sec = m_connection.GetOptions().nConnTimeout;
     connTimeout.tv_usec = 0;
 
     BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, m_iter->ai_addr, m_iter->ai_addrlen, connTimeout);
