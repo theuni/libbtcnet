@@ -22,6 +22,7 @@ typedef int64_t ConnID;
 
 class CConnectionHandlerInt;
 struct CNetworkConfig;
+class CNodeEvents;
 
 class CConnectionHandler
 {
@@ -205,7 +206,7 @@ protected:
     ///        the original address again.
     /// \returns false if the new connection is unwanted and should be immediately
     ///          disconnected, otherwise true.
-    virtual bool OnOutgoingConnection(ConnID id, const CConnection& conn, const CConnection& resolved) = 0;
+    virtual CNodeEvents* OnOutgoingConnection(ConnID id, const CConnection& conn, const CConnection& resolved) = 0;
 
     /// \brief Notification of a successful outgoing connection
     ///
@@ -215,7 +216,7 @@ protected:
     /// \param resolved The incoming client's address
     /// \returns false if the new connection is unwanted and should be immediately
     ///          disconnected, otherwise true.
-    virtual bool OnIncomingConnection(ConnID id, const CConnection& bind, const CConnection& resolved) = 0;
+    virtual CNodeEvents* OnIncomingConnection(ConnID id, const CConnection& bind, const CConnection& resolved) = 0;
 
     /// \brief Notification of a disconnected connection
     ///
@@ -223,67 +224,6 @@ protected:
     /// \param id The connection's unique id
     /// \param persistent Whether or not a reconnection attempt will be made
     virtual bool OnDisconnected(ConnID id, bool persistent) = 0;
-
-    /// \brief Notification of a outgoing readyness
-    ///
-    /// Called when an outgoing connection has been established and is waiting on
-    /// its first send.
-    /// \param id The connection's unique id
-    virtual void OnReadyForFirstSend(ConnID id) = 0;
-
-    /// \brief Notification of new messages
-    ///
-    /// Called when at least one complete message has been received
-    /// \param id The connection's unique id
-    /// \param msgs A list of received messages
-    /// \param totalsize The length of all combined messages
-    virtual bool OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> > msgs, size_t totalsize) = 0;
-
-    /// \brief Notification of a malformed message
-    ///
-    /// Called when a message is received with a corrupt or incorrect header
-    /// This will be followed by an OnDisconnected event.
-    /// \param id The connection's unique id
-    virtual void OnMalformedMessage(ConnID id) = 0;
-
-    /// \brief Notification of a full write buffer
-    ///
-    /// Called when a connection's write buffer has exceeded its allowed size.
-    /// \param id The connection's unique id
-    /// \param bufsize The current write buffer size
-    virtual void OnWriteBufferFull(ConnID id, size_t bufsize) = 0;
-
-    /// \brief Notification of a no-longer-full write buffer
-    ///
-    /// Called when a connection's write buffer was full, and is now below the
-    /// maximum size.
-    /// \param id The connection's unique id
-    /// \param bufsize The current write buffer size
-    virtual void OnWriteBufferReady(ConnID id, size_t bufsize) = 0;
-
-    /// \brief Notification of bytes read from the remote connection
-    ///
-    /// Called every time a chunk is read from the remote. Does not indicate a
-    /// complete message has been received.
-    /// \param id The connection's unique id
-    /// \param bytes Number of bytes read since the last notification
-    /// \param total_bytes Total bytes read
-    virtual void OnBytesRead(ConnID id, size_t bytes, size_t total_bytes) = 0;
-
-    /// \brief Notification of bytes written to the remote connection
-    ///
-    /// Called every time a chunk is written to the remote. Does not indicate a
-    /// complete message has been sent.
-    /// \param id The connection's unique id
-    /// \param bytes Number of bytes written since the last notification
-    /// \param total_bytes Total bytes written
-    virtual void OnBytesWritten(ConnID id, size_t bytes, size_t total_bytes) = 0;
-
-    /// \brief Notification of ping timeout
-    ///
-    /// Called when the ping timer reaches zero before it is reset
-    /// \param id The connection's unique id
-    virtual void OnPingTimeout(ConnID id) = 0;
 
     /// \brief Notification of shutdown of the manager
     ///

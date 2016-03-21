@@ -6,6 +6,7 @@
 
 #include "libbtcnet/connection.h"
 #include "libbtcnet/handler.h"
+#include "libbtcnet/nodeevents.h"
 
 #include "eventtypes.h"
 #include "logger.h"
@@ -220,12 +221,6 @@ void CConnectionHandlerInt::OnResolveFailure(ConnID id, const CConnection& conn,
         m_request_event.active();
 }
 
-void CConnectionHandlerInt::OnWriteBufferReady(ConnID id, size_t bufsize)
-{
-    assert(IsEventThread());
-    m_interface.OnWriteBufferReady(id, bufsize);
-}
-
 void CConnectionHandlerInt::OnDisconnected(ConnID id, bool reconnect)
 {
     assert(IsEventThread());
@@ -308,15 +303,18 @@ void CConnectionHandlerInt::OnIncomingConnected(ConnID id, const CConnection& co
     it->second.swap(moved);
     m_connecting.erase(it);
 
-    if (!m_interface.OnIncomingConnection(id, conn, resolved_conn))
+    CNodeEvents* events(m_interface.OnIncomingConnection(id, conn, resolved_conn));
+    if (events == nullptr)
         return;
     moved->SetRateLimitGroup(m_incoming_rate_limit);
+    moved->SetEvents(events);
     moved->Enable();
     {
         optional_lock(m_conn_mutex, m_enable_threading);
         m_connected.emplace_hint(m_connected.end(), id, std::move(moved));
     }
     m_incoming_conn_count++;
+    events->OnReadyForFirstSend();
 }
 
 void CConnectionHandlerInt::OnOutgoingConnected(ConnID id, const CConnection& conn, const CConnection& resolved_conn)
@@ -329,33 +327,18 @@ void CConnectionHandlerInt::OnOutgoingConnected(ConnID id, const CConnection& co
     it->second.swap(moved);
     m_connecting.erase(it);
 
-    if (!m_interface.OnOutgoingConnection(id, conn, resolved_conn))
+    CNodeEvents* events(m_interface.OnOutgoingConnection(id, conn, resolved_conn));
+    if (events == nullptr)
         return;
     moved->SetRateLimitGroup(m_outgoing_rate_limit);
+    moved->SetEvents(events);
     moved->Enable();
     {
         optional_lock(m_conn_mutex, m_enable_threading);
         m_connected.emplace_hint(m_connected.end(), id, std::move(moved));
     }
     m_outgoing_conn_count++;
-    m_interface.OnReadyForFirstSend(id);
-}
-
-bool CConnectionHandlerInt::OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> >&& msgs, size_t totalsize)
-{
-    assert(IsEventThread());
-    return m_interface.OnReceiveMessages(id, std::move(msgs), totalsize);
-}
-
-void CConnectionHandlerInt::OnWriteBufferFull(ConnID id, size_t bufsize)
-{
-    assert(IsEventThread());
-    m_interface.OnWriteBufferFull(id, bufsize);
-}
-
-void CConnectionHandlerInt::OnPingTimeout(ConnID id)
-{
-    m_interface.OnPingTimeout(id);
+    events->OnReadyForFirstSend();
 }
 
 bool CConnectionHandlerInt::Bind(CConnection conn)

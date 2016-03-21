@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "connectionbase.h"
+#include "libbtcnet/nodeevents.h"
 #include "message.h"
 #include "event2/buffer.h"
 #include "event2/bufferevent.h"
@@ -27,11 +28,17 @@ private:
 };
 
 ConnectionBase::ConnectionBase(CConnectionHandlerInt& handler, CConnection&& conn, ConnID id)
-    : m_handler(handler), m_event_base(handler.GetEventBase()), m_connection(std::move(conn)), m_id(id), m_reconnect_func(m_event_base, 0, std::bind(&ConnectionBase::Connect, this)), m_disconnect_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectInt, this, 0)), m_disconnect_wait_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectWhenFinishedInt, this)), m_check_write_buffer_func(m_event_base, 0, std::bind(&ConnectionBase::CheckWriteBufferInt, this)), m_ping_timeout_func(m_event_base, 0, std::bind(&ConnectionBase::PingTimeoutInt, this))
+    : m_handler(handler), m_event_base(handler.GetEventBase()), m_connection(std::move(conn)), m_id(id), m_reconnect_func(m_event_base, 0, std::bind(&ConnectionBase::Connect, this)), m_disconnect_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectInt, this, 0)), m_disconnect_wait_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectWhenFinishedInt, this)), m_check_write_buffer_func(m_event_base, 0, std::bind(&ConnectionBase::CheckWriteBufferInt, this)), m_ping_timeout_func(m_event_base, 0, std::bind(&ConnectionBase::PingTimeoutInt, this)), m_events(nullptr)
 {
 }
 
 ConnectionBase::~ConnectionBase() = default;
+
+void ConnectionBase::SetEvents(CNodeEvents* events)
+{
+    assert(m_events == nullptr);
+    m_events = events;
+}
 
 void ConnectionBase::Disconnect()
 {
@@ -77,6 +84,7 @@ void ConnectionBase::Retry(ConnID newId)
     m_rate_cfg.free();
     m_bytes_read = 0;
     m_bytes_written = 0;
+    m_events = nullptr;
 
     m_id = newId;
     DEBUG_PRINT(LOGVERBOSE, "id:", m_id, "queuing reconnect");
@@ -229,13 +237,15 @@ void ConnectionBase::CheckWriteBufferInt()
             bufferevent_setcb(m_bev, read_cb, write_cb, event_cb, this);
         }
     }
-    if (full)
-        m_handler.OnWriteBufferFull(m_id, buflen);
+    if (full) {
+        assert(m_events != nullptr);
+        m_events->OnWriteBufferFull(buflen);
+    }
 }
 
 void ConnectionBase::PingTimeoutInt()
 {
-    m_handler.OnPingTimeout(m_id);
+    m_events->OnPingTimeout();
 }
 
 void ConnectionBase::first_read_cb(bufferevent* bev, void* ctx)
@@ -265,7 +275,8 @@ void ConnectionBase::read_data(struct evbuffer* /*unused*/, const struct evbuffe
     if (info->n_added != 0u) {
         ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
         base->m_bytes_read += info->n_added;
-        base->m_handler.m_interface.OnBytesRead(base->m_id, info->n_added, base->m_bytes_read);
+        assert(base->m_events != nullptr);
+        base->m_events->OnBytesRead(info->n_added, base->m_bytes_read);
         DEBUG_PRINT(LOGALL, "id:", base->m_id, "Read:", info->n_added, "bytes. Total:", base->m_bytes_read);
     }
 }
@@ -276,7 +287,8 @@ void ConnectionBase::wrote_data(struct evbuffer* /*unused*/, const struct evbuff
     if (info->n_deleted != 0u) {
         ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
         base->m_bytes_written += info->n_deleted;
-        base->m_handler.m_interface.OnBytesWritten(base->m_id, info->n_deleted, base->m_bytes_written);
+        assert(base->m_events != nullptr);
+        base->m_events->OnBytesWritten(info->n_deleted, base->m_bytes_written);
         DEBUG_PRINT(LOGALL, "id:", base->m_id, "Wrote:", info->n_deleted, "bytes. Total:", base->m_bytes_written);
     }
 }
@@ -343,7 +355,8 @@ void ConnectionBase::read_cb(bufferevent* bev, void* ctx)
         base->DisconnectInt(0);
     } else if (totalsize != 0u) {
         DEBUG_PRINT(LOGINFO, "id:", base->m_id, "Received", msgs.size(), "messages");
-        base->m_handler.OnReceiveMessages(base->m_id, std::move(msgs), totalsize);
+        assert(base->m_events != nullptr);
+        base->m_events->OnReceiveMessages(std::move(msgs), totalsize);
     }
 }
 
@@ -354,7 +367,8 @@ void ConnectionBase::write_cb(bufferevent* bev, void* ctx)
     evbuffer* output = bufferevent_get_output(bev);
     size_t buflen = evbuffer_get_length(output);
     bufferevent_setcb(bev, read_cb, nullptr, event_cb, ctx);
-    base->m_handler.OnWriteBufferReady(base->m_id, buflen);
+    assert(base->m_events != nullptr);
+    base->m_events->OnWriteBufferReady(buflen);
 }
 
 void ConnectionBase::close_on_finished_writecb(bufferevent* /*unused*/, void* ctx)

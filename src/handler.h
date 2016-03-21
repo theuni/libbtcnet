@@ -68,18 +68,14 @@ public:
     const event_type<event_base>& GetEventBase() const;
 
 private:
-    bool OnReceiveMessages(ConnID id, std::list<std::vector<unsigned char> >&& msgs, size_t totalsize);
     void OnIncomingConnected(ConnID id, const CConnection& conn, const CConnection& resolved_conn);
     void OnOutgoingConnected(ConnID id, const CConnection& conn, const CConnection& resolved_conn);
     void OnConnectionFailure(ConnID id, ConnectionFailureType type, int error, CConnection failed, bool retry);
-    void OnWriteBufferFull(ConnID id, size_t bufsize);
-    void OnWriteBufferReady(ConnID id, size_t bufsize);
     void OnResolveComplete(ConnID id, const CConnection& conn, std::list<CConnection> resolved);
     void OnResolveFailure(ConnID id, const CConnection& conn, int error, bool retry);
     void OnIncomingConnection(const CConnection& bind, evutil_socket_t sock, sockaddr* address, int socklen);
     void OnListenFailure(ConnID id, const CConnection& bind);
     void OnDisconnected(ConnID id, bool reconnect);
-    void OnPingTimeout(ConnID id);
 
     void RequestOutgoingInt();
     void ShutdownInt();

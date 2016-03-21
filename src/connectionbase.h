@@ -41,6 +41,7 @@ public:
     void SetRateLimitGroup(event_type<bufferevent_rate_limit_group>& group);
     const CConnection& GetBaseConnection() const;
     void ResetPingTimeout(int seconds);
+    void SetEvents(CNodeEvents* events);
 
 protected:
     ConnectionBase(CConnectionHandlerInt& handler, CConnection&& conn, ConnID id);
@@ -86,6 +87,7 @@ private:
     CEvent m_disconnect_wait_func;
     CEvent m_check_write_buffer_func;
     CEvent m_ping_timeout_func;
+    CNodeEvents* m_events;
 };
 
 #endif // LIBBTCNET_SRC_CONNECTIONBASE_H
