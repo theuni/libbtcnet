@@ -35,6 +35,11 @@ void CBareProxy::InitProxy(event_type<bufferevent>&& bev)
     bufferevent_setcb(m_bev, receive_init, nullptr, event_cb, this);
     bufferevent_setwatermark(m_bev, EV_READ, 2, 0);
 
+    // TODO: Need a proxy-specific timeout here.
+    timeval recvTimeout = {m_proxy_connection.GetOptions().nRecvTimeout, 0};
+    timeval sendTimeout = {m_proxy_connection.GetOptions().nSendTimeout, 0};
+    bufferevent_set_timeouts(m_bev, &recvTimeout, &sendTimeout);
+
     const CProxy& proxy = m_proxy_connection.GetProxy();
     assert(proxy.IsSet());
     const CProxyAuth& auth = proxy.GetAuth();
