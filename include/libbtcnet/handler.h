@@ -178,7 +178,7 @@ protected:
     /// Called when a resolve-only request has failed.
     /// \param conn The original request
     /// \param retry Whether or not the request will be retried
-    virtual void OnDnsFailure(const CConnection& conn, bool retry) = 0;
+    virtual bool OnDnsFailure(const CConnection& conn, bool retry) = 0;
 
     /// \brief Notification of outgoing connection failure
     ///
@@ -187,14 +187,14 @@ protected:
     /// \param resolved The attempted resolved address if applicable, otherwise
     ///        the original address again.
     /// \param retry Whether or not the connection will be retried
-    virtual void OnConnectionFailure(const CConnection& conn, const CConnection& resolved, bool retry) = 0;
+    virtual bool OnConnectionFailure(const CConnection& conn, const CConnection& resolved, bool retry) = 0;
 
     /// \brief Notification of outgoing proxy failure
     ///
     /// Called when an outgoing proxy connection has failed.
     /// \param conn The original address
     /// \param retry Whether or not the connection will be retried
-    virtual void OnProxyFailure(const CConnection& conn, bool retry) = 0;
+    virtual bool OnProxyFailure(const CConnection& conn, bool retry) = 0;
 
     /// \brief Notification of a successful outgoing connection
     ///
@@ -222,7 +222,7 @@ protected:
     /// Called when an existing connection is disconnected
     /// \param id The connection's unique id
     /// \param persistent Whether or not a reconnection attempt will be made
-    virtual void OnDisconnected(ConnID id, bool persistent) = 0;
+    virtual bool OnDisconnected(ConnID id, bool persistent) = 0;
 
     /// \brief Notification of a outgoing readyness
     ///

@@ -205,10 +205,10 @@ void CConnectionHandlerInt::OnResolveFailure(ConnID id, const CConnection& conn,
 {
     assert(IsEventThread());
     retry = retry && !m_shutdown;
-    m_interface.OnDnsFailure(conn, retry);
+    bool ret = m_interface.OnDnsFailure(conn, retry);
     auto it = m_dns_resolves.find(id);
     assert(it != m_dns_resolves.end());
-    if (retry)
+    if (retry && ret)
         it->second->Retry();
     else
         m_dns_resolves.erase(it);
@@ -241,8 +241,8 @@ void CConnectionHandlerInt::OnDisconnected(ConnID id, bool reconnect)
     else
         m_incoming_conn_count--;
 
-    m_interface.OnDisconnected(id, reconnect);
-    if (reconnect) {
+    bool ret = m_interface.OnDisconnected(id, reconnect);
+    if (reconnect && ret) {
         ConnID newId = GetNextConnectionIndex();
         auto it = m_connecting.emplace_hint(m_connecting.end(), newId, std::move(moved));
         it->second->Retry(newId);
@@ -278,14 +278,15 @@ void CConnectionHandlerInt::OnConnectionFailure(ConnID id, ConnectionFailureType
     auto ptr = std::move(it->second);
     m_connecting.erase(it);
     retry = retry && !m_shutdown;
+    bool ret = false;
 
     if ((type & ConnectionFailureType::PROXY) != 0)
-        m_interface.OnProxyFailure(failed, retry);
+        ret = m_interface.OnProxyFailure(failed, retry);
     else if ((type & ConnectionFailureType::RESOLVE) != 0)
-        m_interface.OnDnsFailure(std::move(failed), retry);
+        ret = m_interface.OnDnsFailure(std::move(failed), retry);
     else
-        m_interface.OnConnectionFailure(failed, failed, retry);
-    if (retry && !m_shutdown) {
+        ret = m_interface.OnConnectionFailure(failed, failed, retry);
+    if (retry && ret) {
         ConnID newId = GetNextConnectionIndex();
         auto newit = m_connecting.emplace_hint(m_connecting.end(), newId, std::move(ptr));
         newit->second->Retry(newId);
