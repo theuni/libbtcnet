@@ -1,5 +1,5 @@
 ---
-Checks:          'clang-diagnostic-*,clang-analyzer-*,-clang-analyzer-alpha*,*,-google-runtime-int,-google-readability-braces-around-statements,-readability-braces-around-statements,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-union-access,-google-readability-namespace-comments,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-llvm-header-guard,-clang-analyzer-alpha.deadcode.UnreachableCode,-modernize-pass-by-value'
+Checks:          'clang-diagnostic-*,clang-analyzer-*,-clang-analyzer-alpha*,*,-google-runtime-int,-google-readability-braces-around-statements,-readability-braces-around-statements,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-union-access,-google-readability-namespace-comments,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-llvm-header-guard,-clang-analyzer-alpha.deadcode.UnreachableCode,-modernize-pass-by-value,-google-readability-todo'
 HeaderFilterRegex: '.*'
 AnalyzeTemporaryDtors: true
 User:            cory
