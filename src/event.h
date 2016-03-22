@@ -23,6 +23,7 @@ public:
     void del();
     void active();
     void add(const timeval& tv);
+    void priority_set(int priority);
 
     void reset(const event_type<event_base>& base, short flags, std::function<void()>&& func);
     operator bool() const;

@@ -85,8 +85,12 @@ void CConnectionHandlerInt::Start(int outgoing_limit)
     assert(result == 0);
     (void)result;
 
+    event_base_priority_init(m_event_base, 3);
+
     m_request_event.reset(m_event_base, EV_PERSIST, std::bind(&CConnectionHandlerInt::RequestOutgoingInt, this));
     m_shutdown_event.reset(m_event_base, 0, std::bind(&CConnectionHandlerInt::ShutdownInt, this));
+
+    m_shutdown_event.priority_set(0);
 
     m_outgoing_rate_cfg = ev_token_bucket_cfg_new(EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, nullptr);
     m_incoming_rate_cfg = ev_token_bucket_cfg_new(EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, EV_RATE_LIMIT_MAX, nullptr);

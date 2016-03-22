@@ -59,6 +59,11 @@ void CEvent::add(const timeval& tv)
     event_add(m_event, &tv);
 }
 
+void CEvent::priority_set(int priority)
+{
+    event_priority_set(m_event, priority);
+}
+
 void CEvent::callback(evutil_socket_t, short /*unused*/, void* ctx)
 {
     assert(ctx != nullptr);
