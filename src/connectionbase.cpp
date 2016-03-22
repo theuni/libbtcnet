@@ -27,7 +27,7 @@ private:
 };
 
 ConnectionBase::ConnectionBase(CConnectionHandlerInt& handler, CConnection&& conn, ConnID id)
-    : m_handler(handler), m_event_base(handler.GetEventBase()), m_connection(std::move(conn)), m_id(id), m_reconnect_func(m_event_base, 0, std::bind(&ConnectionBase::Connect, this)), m_disconnect_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectInt, this, 0)), m_disconnect_wait_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectWhenFinishedInt, this)), m_check_write_buffer_func(m_event_base, 0, std::bind(&ConnectionBase::CheckWriteBufferInt, this))
+    : m_handler(handler), m_event_base(handler.GetEventBase()), m_connection(std::move(conn)), m_id(id), m_reconnect_func(m_event_base, 0, std::bind(&ConnectionBase::Connect, this)), m_disconnect_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectInt, this, 0)), m_disconnect_wait_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectWhenFinishedInt, this)), m_check_write_buffer_func(m_event_base, 0, std::bind(&ConnectionBase::CheckWriteBufferInt, this)), m_ping_timeout_func(m_event_base, 0, std::bind(&ConnectionBase::PingTimeoutInt, this))
 {
 }
 
@@ -41,6 +41,15 @@ void ConnectionBase::Disconnect()
 void ConnectionBase::DisconnectWhenFinished()
 {
     m_disconnect_wait_func.active();
+}
+
+void ConnectionBase::ResetPingTimeout(int seconds)
+{
+    if (seconds != 0) {
+        timeval timeout = {seconds, 0};
+        m_ping_timeout_func.add(timeout);
+    } else
+        m_ping_timeout_func.del();
 }
 
 void ConnectionBase::PauseRecv()
@@ -103,6 +112,7 @@ void ConnectionBase::DisconnectInt(int /*reason*/)
     m_reconnect_func.del();
     m_disconnect_wait_func.del();
     m_check_write_buffer_func.del();
+    m_ping_timeout_func.del();
     {
         BufferEventLocker lock(m_bev);
         bufferevent_disable(m_bev, EV_READ | EV_WRITE);
@@ -221,6 +231,11 @@ void ConnectionBase::CheckWriteBufferInt()
     }
     if (full)
         m_handler.OnWriteBufferFull(m_id, buflen);
+}
+
+void ConnectionBase::PingTimeoutInt()
+{
+    m_handler.OnPingTimeout(m_id);
 }
 
 void ConnectionBase::first_read_cb(bufferevent* bev, void* ctx)

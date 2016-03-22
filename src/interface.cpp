@@ -71,3 +71,8 @@ bool CConnectionHandler::Send(ConnID id, const unsigned char* data, size_t size)
 {
     return m_internal->Send(id, data, size);
 }
+
+void CConnectionHandler::ResetPingTimeout(ConnID id, int seconds)
+{
+    m_internal->ResetPingTimeout(id, seconds);
+}

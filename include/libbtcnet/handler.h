@@ -60,6 +60,14 @@ public:
     /// \param id The connection's unique id
     void UnpauseRecv(ConnID id);
 
+    /// \brief Reset the ping timeout
+    ///
+    /// This may only be called after the handler has been started. See OnStartup.
+    /// Once bound, new connection notifications will come via OnIncomingConnection
+    /// \param id The connection's unique id
+    /// \param seconds new timeout value, or 0 to disable
+    void ResetPingTimeout(ConnID id, int seconds);
+
     /// \brief Begin the shutdown process
     ///
     /// This may only be called after the handler has been started. See OnStartup.
@@ -270,6 +278,12 @@ protected:
     /// \param bytes Number of bytes written since the last notification
     /// \param total_bytes Total bytes written
     virtual void OnBytesWritten(ConnID id, size_t bytes, size_t total_bytes) = 0;
+
+    /// \brief Notification of ping timeout
+    ///
+    /// Called when the ping timer reaches zero before it is reset
+    /// \param id The connection's unique id
+    virtual void OnPingTimeout(ConnID id) = 0;
 
     /// \brief Notification of shutdown of the manager
     ///

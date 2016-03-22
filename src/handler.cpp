@@ -348,6 +348,11 @@ void CConnectionHandlerInt::OnWriteBufferFull(ConnID id, size_t bufsize)
     m_interface.OnWriteBufferFull(id, bufsize);
 }
 
+void CConnectionHandlerInt::OnPingTimeout(ConnID id)
+{
+    m_interface.OnPingTimeout(id);
+}
+
 bool CConnectionHandlerInt::Bind(CConnection conn)
 {
     assert(IsEventThread());
@@ -516,4 +521,14 @@ void CConnectionHandlerInt::Shutdown()
 {
     assert(m_shutdown_event);
     m_shutdown_event.active();
+}
+
+void CConnectionHandlerInt::ResetPingTimeout(ConnID id, int seconds)
+{
+    if (id >= 0) {
+        optional_lock(m_conn_mutex, m_enable_threading);
+        auto it = m_connected.find(id);
+        if (it != m_connected.end())
+            it->second->ResetPingTimeout(seconds);
+    }
 }

@@ -95,6 +95,7 @@ protected:
     void OnProxyFailure(const CConnection& conn, bool retry) final {}
     void OnBytesRead(ConnID id, size_t bytes, size_t total_bytes) final {}
     void OnBytesWritten(ConnID id, size_t bytes, size_t total_bytes) final {}
+    void OnPingTimeout(ConnID id){}
 
 private:
     std::list<CConnection> m_connections;

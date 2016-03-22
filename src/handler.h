@@ -58,6 +58,7 @@ public:
     void UnpauseRecv(ConnID id);
     bool Bind(CConnection conn);
     void Disconnect(ConnID id, bool force);
+    void ResetPingTimeout(ConnID id, int seconds);
     bool PumpEvents(bool block);
     void Shutdown();
     void Start(int outgoing_limit);
@@ -78,6 +79,7 @@ private:
     void OnIncomingConnection(const CConnection& bind, evutil_socket_t sock, sockaddr* address, int socklen);
     void OnListenFailure(ConnID id, const CConnection& bind);
     void OnDisconnected(ConnID id, bool reconnect);
+    void OnPingTimeout(ConnID id);
 
     void RequestOutgoingInt();
     void ShutdownInt();
