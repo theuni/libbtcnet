@@ -59,7 +59,8 @@ private:
     void CheckWriteBufferInt();
     void PingTimeoutInt();
     static void event_cb(bufferevent* /*unused*/, short type, void* ctx);
-    static void read_cb(bufferevent* bev, void* ctx);
+    static void read_cb_chunk(bufferevent* bev, void* ctx);
+    static void read_cb_message(bufferevent* bev, void* ctx);
     static void write_cb(bufferevent* bev, void* ctx);
     static void close_on_finished_writecb(bufferevent* bev, void* ctx);
     static void first_read_cb(bufferevent* bev, void* ctx);
@@ -86,6 +87,7 @@ private:
     CEvent m_disconnect_wait_func;
     CEvent m_check_write_buffer_func;
     CEvent m_ping_timeout_func;
+    bufferevent_data_cb read_cb_ptr;
 };
 
 #endif // LIBBTCNET_SRC_CONNECTIONBASE_H

@@ -27,7 +27,7 @@ private:
 };
 
 ConnectionBase::ConnectionBase(CConnectionHandlerInt& handler, CConnection&& conn, ConnID id)
-    : m_handler(handler), m_event_base(handler.GetEventBase()), m_connection(std::move(conn)), m_id(id), m_reconnect_func(m_event_base, 0, std::bind(&ConnectionBase::Connect, this)), m_disconnect_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectInt, this, 0)), m_disconnect_wait_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectWhenFinishedInt, this)), m_check_write_buffer_func(m_event_base, 0, std::bind(&ConnectionBase::CheckWriteBufferInt, this)), m_ping_timeout_func(m_event_base, 0, std::bind(&ConnectionBase::PingTimeoutInt, this))
+    : m_handler(handler), m_event_base(handler.GetEventBase()), m_connection(std::move(conn)), m_id(id), m_reconnect_func(m_event_base, 0, std::bind(&ConnectionBase::Connect, this)), m_disconnect_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectInt, this, 0)), m_disconnect_wait_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectWhenFinishedInt, this)), m_check_write_buffer_func(m_event_base, 0, std::bind(&ConnectionBase::CheckWriteBufferInt, this)), m_ping_timeout_func(m_event_base, 0, std::bind(&ConnectionBase::PingTimeoutInt, this)), read_cb_ptr(nullptr)
 {
 }
 
@@ -169,6 +169,16 @@ void ConnectionBase::InitConnection()
     bufferevent_setwatermark(m_bev, EV_READ, 0, 0);
     bufferevent_setwatermark(m_bev, EV_WRITE, opts.nMaxSendBuffer, 0);
 
+    // Setup the read callback for chunks if a chunksize is provided,
+    // messages if a headersize is provided, or nothing otherwise.
+    const CNetworkConfig& netconfig = m_connection.GetNetConfig();
+    if (netconfig.chunk_size > 0)
+        read_cb_ptr = &read_cb_chunk;
+    else if (netconfig.header_size > 0)
+        read_cb_ptr = &read_cb_message;
+    else
+        read_cb_ptr = nullptr;
+
     // Don't set the regular callbacks yet. Before any data is sent/received,
     // The initial timeout is in effect. first_read_cb/first_write_cb
     // (whichever is hit first) will set the non-initial-timeout callbacks.
@@ -226,7 +236,7 @@ void ConnectionBase::CheckWriteBufferInt()
         buflen = evbuffer_get_length(output);
         if (static_cast<int>(buflen) >= maxsend) {
             full = true;
-            bufferevent_setcb(m_bev, read_cb, write_cb, event_cb, this);
+            bufferevent_setcb(m_bev, read_cb_ptr, write_cb, event_cb, this);
         }
     }
     if (full)
@@ -244,9 +254,11 @@ void ConnectionBase::first_read_cb(bufferevent* bev, void* ctx)
     ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
     timeval recvTimeout = {base->m_connection.GetOptions().nRecvTimeout, 0};
     timeval sendTimeout = {base->m_connection.GetOptions().nSendTimeout, 0};
+    bufferevent_data_cb read_cb = base->read_cb_ptr;
     bufferevent_set_timeouts(base->m_bev, &recvTimeout, &sendTimeout);
     bufferevent_setcb(bev, read_cb, nullptr, event_cb, ctx);
-    read_cb(bev, ctx);
+    if (read_cb != nullptr)
+        read_cb(bev, ctx);
 }
 
 void ConnectionBase::first_write_cb(bufferevent* bev, void* ctx)
@@ -256,7 +268,7 @@ void ConnectionBase::first_write_cb(bufferevent* bev, void* ctx)
     timeval recvTimeout = {base->m_connection.GetOptions().nRecvTimeout, 0};
     timeval sendTimeout = {base->m_connection.GetOptions().nSendTimeout, 0};
     bufferevent_set_timeouts(base->m_bev, &recvTimeout, &sendTimeout);
-    bufferevent_setcb(bev, read_cb, nullptr, event_cb, ctx);
+    bufferevent_setcb(bev, base->read_cb_ptr, nullptr, event_cb, ctx);
 }
 
 void ConnectionBase::read_data(struct evbuffer* /*unused*/, const struct evbuffer_cb_info* info, void* ctx)
@@ -291,7 +303,38 @@ void ConnectionBase::event_cb(bufferevent* /*unused*/, short type, void* ctx)
         base->DisconnectInt(0);
 }
 
-void ConnectionBase::read_cb(bufferevent* bev, void* ctx)
+void ConnectionBase::read_cb_chunk(bufferevent* bev, void* ctx)
+{
+    assert(ctx);
+    assert(bev);
+
+    ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
+    const CNetworkConfig& netconfig = base->m_connection.GetNetConfig();
+    assert(netconfig.chunk_size > 0);
+    size_t chunk_size = netconfig.chunk_size;
+
+    std::list<std::vector<unsigned char> > msgs;
+    size_t remaining;
+    evbuffer* input;
+    {
+        BufferEventLocker lock(bev);
+        input = bufferevent_get_input(bev);
+        remaining = evbuffer_get_length(input);
+        while (remaining >= chunk_size) {
+            msgs.emplace_back(chunk_size);
+            evbuffer_remove(input, msgs.back().data(), chunk_size);
+            remaining -= chunk_size;
+        }
+    }
+    evbuffer_expand(input, chunk_size);
+    if (msgs.empty())
+        bufferevent_setwatermark(bev, EV_READ, chunk_size, 0);
+    else
+        base->m_handler.OnReceiveMessages(base->m_id, std::move(msgs), msgs.size() * chunk_size);
+}
+
+
+void ConnectionBase::read_cb_message(bufferevent* bev, void* ctx)
 {
     assert(ctx);
     assert(bev);
@@ -353,7 +396,7 @@ void ConnectionBase::write_cb(bufferevent* bev, void* ctx)
     ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
     evbuffer* output = bufferevent_get_output(bev);
     size_t buflen = evbuffer_get_length(output);
-    bufferevent_setcb(bev, read_cb, nullptr, event_cb, ctx);
+    bufferevent_setcb(bev, base->read_cb_ptr, nullptr, event_cb, ctx);
     base->m_handler.OnWriteBufferReady(base->m_id, buflen);
 }
 

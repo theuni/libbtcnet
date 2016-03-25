@@ -53,6 +53,7 @@ protected:
         mainnet_config.header_msg_size_offset = 16;
         mainnet_config.header_msg_size_size = 4;
         mainnet_config.header_size = 24;
+        mainnet_config.chunk_size = 0;
         mainnet_config.message_max_size = 1000000 + mainnet_config.header_size;
         mainnet_config.message_start = mainnet_message_start;
         mainnet_config.protocol_version = 70011;
