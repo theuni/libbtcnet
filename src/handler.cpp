@@ -195,7 +195,7 @@ void CConnectionHandlerInt::SetSocketOpts(sockaddr* addr, int /*unused*/, evutil
 #endif
 
     if (addr->sa_family == AF_INET || addr->sa_family == AF_INET6)
-        setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, static_cast<sockoptptr*>(&set), sizeof(int));
+        setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<sockoptptr*>(&set), sizeof(int));
 }
 
 void CConnectionHandlerInt::OnResolveComplete(ConnID id, const CConnection& conn, std::list<CConnection> resolved)
