@@ -8,10 +8,8 @@
 #include <vector>
 
 struct CNetworkConfig {
-    int header_msg_string_offset;
     int header_msg_size_offset;
     int header_msg_size_size;
-    int header_msg_string_size;
     int header_size;
     unsigned int message_max_size;
     std::vector<unsigned char> message_start;

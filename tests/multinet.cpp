@@ -50,10 +50,8 @@ protected:
            that it can be expressed in the parameters below.
          */
         CNetworkConfig mainnet_config;
-        mainnet_config.header_msg_string_offset = 4;
         mainnet_config.header_msg_size_offset = 16;
         mainnet_config.header_msg_size_size = 4;
-        mainnet_config.header_msg_string_size = 12;
         mainnet_config.header_size = 24;
         mainnet_config.message_max_size = 1000000 + mainnet_config.header_size;
         mainnet_config.message_start = mainnet_message_start;
