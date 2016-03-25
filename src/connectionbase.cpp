@@ -12,6 +12,12 @@
 #include "logger.h"
 #include <stdio.h>
 
+#if defined(_WIN32)
+#include <ws2tcpip.h>
+#else
+#include <netinet/tcp.h>
+#endif
+
 struct BufferEventLocker {
     explicit BufferEventLocker(bufferevent* bev) : m_bev(bev)
     {
@@ -150,6 +156,26 @@ void ConnectionBase::SetRateLimitGroup(event_type<bufferevent_rate_limit_group>&
     bufferevent_add_to_rate_limit_group(m_bev, group);
 }
 
+bool ConnectionBase::SetSocketOpts(evutil_socket_t sock)
+{
+    if (evutil_make_socket_nonblocking(sock) != 0)
+        return false;
+
+#ifdef _WIN32
+    typedef char sockoptptr;
+#else
+    typedef void sockoptptr;
+#endif
+    int type;
+    ev_socklen_t length = sizeof(type);
+    if (getsockopt(sock, SOL_SOCKET, SO_TYPE, reinterpret_cast<sockoptptr*>(&type), &length) == 0) {
+        int set = 1;
+        if (type == SOCK_STREAM)
+            setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<sockoptptr*>(&set), sizeof(int));
+    }
+    return true;
+}
+
 void ConnectionBase::InitConnection()
 {
     assert(m_bev);
@@ -157,7 +183,7 @@ void ConnectionBase::InitConnection()
     const CConnectionOptions& opts = conn.GetOptions();
 
     evutil_socket_t sock = bufferevent_getfd(m_bev);
-    evutil_make_socket_nonblocking(sock);
+    SetSocketOpts(sock);
 
     bufferevent_disable(m_bev, EV_READ | EV_WRITE);
 

@@ -86,7 +86,6 @@ private:
     void BindInt();
 
     void StartConnection(CConnection&& conn);
-    void SetSocketOpts(sockaddr* addr, int socksize, evutil_socket_t sock);
     bool IsEventThread() const;
     ConnID GetNextConnectionIndex();
 

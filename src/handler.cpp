@@ -26,13 +26,6 @@
 #include <string.h>
 #include <limits>
 
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <ws2tcpip.h>
-#else
-#include <netinet/tcp.h>
-#endif
-
 static constexpr int g_max_simultaneous_connecting = 8;
 
 CConnectionHandlerInt::CConnectionHandlerInt(CConnectionHandler& handler, bool enable_threading)
@@ -182,20 +175,6 @@ bool CConnectionHandlerInt::IsEventThread() const
         return true;
     return m_main_thread == std::this_thread::get_id();
 #endif
-}
-
-void CConnectionHandlerInt::SetSocketOpts(sockaddr* addr, int /*unused*/, evutil_socket_t sock)
-{
-    evutil_make_socket_nonblocking(sock);
-    const int set = 1;
-#ifdef _WIN32
-    typedef const char sockoptptr;
-#else
-    typedef const void sockoptptr;
-#endif
-
-    if (addr->sa_family == AF_INET || addr->sa_family == AF_INET6)
-        setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<sockoptptr*>(&set), sizeof(int));
 }
 
 void CConnectionHandlerInt::OnResolveComplete(ConnID id, const CConnection& conn, std::list<CConnection> resolved)

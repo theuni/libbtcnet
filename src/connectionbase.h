@@ -58,6 +58,7 @@ private:
     void InitConnection();
     void CheckWriteBufferInt();
     void PingTimeoutInt();
+    static bool SetSocketOpts(evutil_socket_t sock);
     static void event_cb(bufferevent* /*unused*/, short type, void* ctx);
     static void read_cb_chunk(bufferevent* bev, void* ctx);
     static void read_cb_message(bufferevent* bev, void* ctx);
