@@ -198,7 +198,7 @@ void CConnectionHandlerInt::SetSocketOpts(sockaddr* addr, int /*unused*/, evutil
         setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, static_cast<sockoptptr*>(&set), sizeof(int));
 }
 
-void CConnectionHandlerInt::OnResolveComplete(ConnID id, const CConnection& conn, std::list<CConnection, std::allocator<CConnection> > resolved)
+void CConnectionHandlerInt::OnResolveComplete(ConnID id, const CConnection& conn, std::list<CConnection> resolved)
 {
     assert(IsEventThread());
     m_interface.OnDnsResponse(conn, std::move(resolved));
