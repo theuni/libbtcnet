@@ -43,25 +43,26 @@ void CEvent::reset(const event_type<event_base>& base, evutil_socket_t sock, sho
 
 void CEvent::del()
 {
-    assert(m_event);
-    event_del(m_event);
+    if (m_event)
+        event_del(m_event);
 }
 
 void CEvent::active()
 {
-    assert(m_event);
-    event_active(m_event, EV_TIMEOUT, 0);
+    if (m_event)
+        event_active(m_event, EV_TIMEOUT, 0);
 }
 
 void CEvent::add(const timeval* tv)
 {
-    assert(m_event);
-    event_add(m_event, tv);
+    if (m_event)
+        event_add(m_event, tv);
 }
 
 void CEvent::priority_set(int priority)
 {
-    event_priority_set(m_event, priority);
+    if (m_event)
+        event_priority_set(m_event, priority);
 }
 
 void CEvent::callback(evutil_socket_t, short /*unused*/, void* ctx)
