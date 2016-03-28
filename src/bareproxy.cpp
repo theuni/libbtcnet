@@ -70,17 +70,17 @@ bool CBareProxy::writeproto(bufferevent* bev, const CConnection& conn)
 
     unsigned short port;
 
-    if (conn.IsDNS()) {
+    if (conn.IsDNS() || conn.GetProxy().GetType() == CProxy::SOCKS5_FORCE_DOMAIN_TYPE) {
         const std::string& host = conn.GetHost();
         port = conn.GetPort();
-        if (conn.GetHost().size() > 255)
+        if (host.size() > 255)
             return false;
         vSocks5.push_back(0x03); // ATYP DOMAINNAME
         vSocks5.push_back(host.size());
         vSocks5.insert(vSocks5.end(), host.begin(), host.end());
         vSocks5.push_back((port >> 8) & 0xFF);
         vSocks5.push_back((port >> 0) & 0xFF);
-    } else {
+    } else if (conn.GetProxy().GetType() == CProxy::SOCKS5) {
         sockaddr_storage sock;
         memset(&sock, 0, sizeof(sock));
         int socksize = sizeof(sock);
@@ -103,7 +103,8 @@ bool CBareProxy::writeproto(bufferevent* bev, const CConnection& conn)
             assert(vSocks5.size() == 10);
         } else
             return false;
-    }
+    } else
+        return false;
     bufferevent_setwatermark(bev, EV_READ, 8, 0);
     bufferevent_write(bev, &vSocks5[0], vSocks5.size());
     return true;

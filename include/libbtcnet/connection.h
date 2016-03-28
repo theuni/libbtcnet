@@ -54,7 +54,8 @@ class CProxy : public CConnectionBase
 {
 public:
     enum Type {
-        SOCKS5 = 1 << 0
+        SOCKS5 = 1,
+        SOCKS5_FORCE_DOMAIN_TYPE = 2
     };
     CProxy(sockaddr* addrIn, int socksize, Type proxytype, CProxyAuth authIn = CProxyAuth());
     CProxy(std::string hostIn, unsigned short portIn, Type proxytype, CProxyAuth authIn = CProxyAuth());
