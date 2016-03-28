@@ -91,7 +91,8 @@ void CConnectionHandlerInt::Start(int outgoing_limit)
     m_outgoing_rate_limit = bufferevent_rate_limit_group_new(m_event_base, m_outgoing_rate_cfg);
     m_incoming_rate_limit = bufferevent_rate_limit_group_new(m_event_base, m_incoming_rate_cfg);
 
-    m_request_event.add({0, 500000});
+    timeval request_timeout = {0, 500000};
+    m_request_event.add(&request_timeout);
     m_interface.OnStartup();
 
     m_request_event.active();

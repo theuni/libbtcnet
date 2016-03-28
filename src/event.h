@@ -22,7 +22,7 @@ public:
     void free();
     void del();
     void active();
-    void add(const timeval& tv);
+    void add(const timeval* tv);
     void priority_set(int priority);
 
     void reset(const event_type<event_base>& base, evutil_socket_t sock, short flags, std::function<void()>&& func);

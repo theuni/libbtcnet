@@ -53,7 +53,7 @@ void ConnectionBase::ResetPingTimeout(int seconds)
 {
     if (seconds != 0) {
         timeval timeout = {seconds, 0};
-        m_ping_timeout_func.add(timeout);
+        m_ping_timeout_func.add(&timeout);
     } else
         m_ping_timeout_func.del();
 }
@@ -87,7 +87,7 @@ void ConnectionBase::Retry(ConnID newId)
     m_id = newId;
     DEBUG_PRINT(LOGVERBOSE, "id:", m_id, "queuing reconnect");
     timeval timeout{m_connection.GetOptions().nRetryInterval, 0};
-    m_reconnect_func.add(timeout);
+    m_reconnect_func.add(&timeout);
 }
 
 void ConnectionBase::SetRateLimit(const CRateLimit& limit)

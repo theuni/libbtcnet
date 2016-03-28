@@ -53,10 +53,10 @@ void CEvent::active()
     event_active(m_event, EV_TIMEOUT, 0);
 }
 
-void CEvent::add(const timeval& tv)
+void CEvent::add(const timeval* tv)
 {
     assert(m_event);
-    event_add(m_event, &tv);
+    event_add(m_event, tv);
 }
 
 void CEvent::priority_set(int priority)
