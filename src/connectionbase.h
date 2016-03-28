@@ -58,14 +58,13 @@ private:
     void InitConnection();
     void CheckWriteBufferInt();
     void PingTimeoutInt();
+    void FirstDataInt();
     static bool SetSocketOpts(evutil_socket_t sock);
     static void event_cb(bufferevent* /*unused*/, short type, void* ctx);
     static void read_cb_chunk(bufferevent* bev, void* ctx);
     static void read_cb_message(bufferevent* bev, void* ctx);
     static void write_cb(bufferevent* bev, void* ctx);
     static void close_on_finished_writecb(bufferevent* bev, void* ctx);
-    static void first_read_cb(bufferevent* bev, void* ctx);
-    static void first_write_cb(bufferevent* bev, void* ctx);
 
     static void read_data(struct evbuffer* /*unused*/, const struct evbuffer_cb_info* info, void* ctx);
     static void wrote_data(struct evbuffer* /*unused*/, const struct evbuffer_cb_info* info, void* ctx);
@@ -88,6 +87,7 @@ private:
     CEvent m_disconnect_wait_func;
     CEvent m_check_write_buffer_func;
     CEvent m_ping_timeout_func;
+    CEvent m_first_data_func;
     bufferevent_data_cb read_cb_ptr;
 };
 

@@ -74,6 +74,7 @@ void ConnectionBase::UnpauseRecv()
 
 void ConnectionBase::Enable()
 {
+    m_first_data_func.add(nullptr);
     bufferevent_enable(m_bev, EV_READ | EV_WRITE);
 }
 
@@ -119,6 +120,7 @@ void ConnectionBase::DisconnectInt(int /*reason*/)
     m_disconnect_wait_func.del();
     m_check_write_buffer_func.del();
     m_ping_timeout_func.del();
+    m_first_data_func.del();
     {
         BufferEventLocker lock(m_bev);
         bufferevent_disable(m_bev, EV_READ | EV_WRITE);
@@ -187,6 +189,9 @@ void ConnectionBase::InitConnection()
 
     bufferevent_disable(m_bev, EV_READ | EV_WRITE);
 
+    // Set the connection's initial timeout. If not connected before this
+    // expires, the bufferevent's event callback will fire and it will be
+    // disconnected.
     timeval initialTimeout;
     initialTimeout.tv_sec = opts.nInitialTimeout;
     initialTimeout.tv_usec = 0;
@@ -195,6 +200,9 @@ void ConnectionBase::InitConnection()
     bufferevent_setwatermark(m_bev, EV_READ, 0, 0);
     bufferevent_setwatermark(m_bev, EV_WRITE, opts.nMaxSendBuffer, 0);
 
+    // Set an event for resetting the timeout to the normal send/receive values.
+    // This will fire once any data is read from/written to the connection.
+    m_first_data_func.reset(m_event_base, sock, EV_READ | EV_WRITE, std::bind(&ConnectionBase::FirstDataInt, this));
     // Setup the read callback for chunks if a chunksize is provided,
     // messages if a headersize is provided, or nothing otherwise.
     const CNetworkConfig& netconfig = m_connection.GetNetConfig();
@@ -205,10 +213,7 @@ void ConnectionBase::InitConnection()
     else
         read_cb_ptr = nullptr;
 
-    // Don't set the regular callbacks yet. Before any data is sent/received,
-    // The initial timeout is in effect. first_read_cb/first_write_cb
-    // (whichever is hit first) will set the non-initial-timeout callbacks.
-    bufferevent_setcb(m_bev, first_read_cb, first_write_cb, event_cb, this);
+    bufferevent_setcb(m_bev, read_cb_ptr, nullptr, event_cb, this);
 
     // Add an additional set of callbacks responsible for reporting _all_
     // socket reads/writes, as opposed to the bufferevent read callback, which
@@ -217,6 +222,13 @@ void ConnectionBase::InitConnection()
     evbuffer* output = bufferevent_get_output(m_bev);
     evbuffer_add_cb(input, read_data, this);
     evbuffer_add_cb(output, wrote_data, this);
+}
+
+void ConnectionBase::FirstDataInt()
+{
+    timeval recvTimeout = {m_connection.GetOptions().nRecvTimeout, 0};
+    timeval sendTimeout = {m_connection.GetOptions().nSendTimeout, 0};
+    bufferevent_set_timeouts(m_bev, &recvTimeout, &sendTimeout);
 }
 
 void ConnectionBase::OnOutgoingConnected(event_type<bufferevent>&& bev, CConnection resolved)
@@ -272,29 +284,6 @@ void ConnectionBase::CheckWriteBufferInt()
 void ConnectionBase::PingTimeoutInt()
 {
     m_handler.OnPingTimeout(m_id);
-}
-
-void ConnectionBase::first_read_cb(bufferevent* bev, void* ctx)
-{
-    assert(ctx);
-    ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
-    timeval recvTimeout = {base->m_connection.GetOptions().nRecvTimeout, 0};
-    timeval sendTimeout = {base->m_connection.GetOptions().nSendTimeout, 0};
-    bufferevent_data_cb read_cb = base->read_cb_ptr;
-    bufferevent_set_timeouts(base->m_bev, &recvTimeout, &sendTimeout);
-    bufferevent_setcb(bev, read_cb, nullptr, event_cb, ctx);
-    if (read_cb != nullptr)
-        read_cb(bev, ctx);
-}
-
-void ConnectionBase::first_write_cb(bufferevent* bev, void* ctx)
-{
-    assert(ctx);
-    ConnectionBase* base = static_cast<ConnectionBase*>(ctx);
-    timeval recvTimeout = {base->m_connection.GetOptions().nRecvTimeout, 0};
-    timeval sendTimeout = {base->m_connection.GetOptions().nSendTimeout, 0};
-    bufferevent_set_timeouts(base->m_bev, &recvTimeout, &sendTimeout);
-    bufferevent_setcb(bev, base->read_cb_ptr, nullptr, event_cb, ctx);
 }
 
 void ConnectionBase::read_data(struct evbuffer* /*unused*/, const struct evbuffer_cb_info* info, void* ctx)
