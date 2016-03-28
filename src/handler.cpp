@@ -338,6 +338,11 @@ void CConnectionHandlerInt::OnPingTimeout(ConnID id)
     m_interface.OnPingTimeout(id);
 }
 
+void CConnectionHandlerInt::OnMalformedMessage(ConnID id)
+{
+    m_interface.OnMalformedMessage(id);
+}
+
 bool CConnectionHandlerInt::Bind(CConnection conn)
 {
     assert(IsEventThread());

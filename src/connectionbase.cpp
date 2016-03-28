@@ -183,6 +183,7 @@ void ConnectionBase::InitConnection()
     assert(m_bev);
     const CConnection& conn = m_connection;
     const CConnectionOptions& opts = conn.GetOptions();
+    const CNetworkConfig& netconfig = m_connection.GetNetConfig();
 
     evutil_socket_t sock = bufferevent_getfd(m_bev);
     SetSocketOpts(sock);
@@ -197,21 +198,29 @@ void ConnectionBase::InitConnection()
     initialTimeout.tv_usec = 0;
     bufferevent_set_timeouts(m_bev, &initialTimeout, &initialTimeout);
 
-    bufferevent_setwatermark(m_bev, EV_READ, 0, 0);
-    bufferevent_setwatermark(m_bev, EV_WRITE, opts.nMaxSendBuffer, 0);
-
     // Set an event for resetting the timeout to the normal send/receive values.
     // This will fire once any data is read from/written to the connection.
     m_first_data_func.reset(m_event_base, sock, EV_READ | EV_WRITE, std::bind(&ConnectionBase::FirstDataInt, this));
+
+    size_t min_read;
+    size_t max_read;
     // Setup the read callback for chunks if a chunksize is provided,
     // messages if a headersize is provided, or nothing otherwise.
-    const CNetworkConfig& netconfig = m_connection.GetNetConfig();
-    if (netconfig.chunk_size > 0)
+    if (netconfig.chunk_size > 0) {
         read_cb_ptr = &read_cb_chunk;
-    else if (netconfig.header_size > 0)
+        min_read = netconfig.chunk_size;
+        max_read = 0;
+    } else if (netconfig.header_size > 0) {
         read_cb_ptr = &read_cb_message;
-    else
+        min_read = netconfig.header_msg_size_offset + netconfig.header_msg_size_size;
+        max_read = netconfig.message_max_size;
+    } else {
         read_cb_ptr = nullptr;
+        min_read = 0;
+        max_read = 0;
+    }
+    bufferevent_setwatermark(m_bev, EV_READ, min_read, max_read);
+    bufferevent_setwatermark(m_bev, EV_WRITE, opts.nMaxSendBuffer, 0);
 
     bufferevent_setcb(m_bev, read_cb_ptr, nullptr, event_cb, this);
 
@@ -342,9 +351,7 @@ void ConnectionBase::read_cb_chunk(bufferevent* bev, void* ctx)
         }
     }
     evbuffer_expand(input, chunk_size);
-    if (msgs.empty())
-        bufferevent_setwatermark(bev, EV_READ, chunk_size, 0);
-    else
+    if (!msgs.empty())
         base->m_handler.OnReceiveMessages(base->m_id, std::move(msgs), msgs.size() * chunk_size);
 }
 
@@ -367,11 +374,15 @@ void ConnectionBase::read_cb_message(bufferevent* bev, void* ctx)
         bool fComplete = false;
         do {
             msgsize = first_complete_message_size(netconfig, input, fComplete, fBadMsgStart);
-
             if (netconfig.message_max_size > 0 && msgsize > netconfig.message_max_size) {
+                DEBUG_PRINT(LOGWARN, "id:", base->m_id, "Received an oversized message");
+                if (fComplete) {
+                    evbuffer_drain(input, msgsize);
+                }
                 fTooBig = true;
                 break;
             } else if (fBadMsgStart) {
+                DEBUG_PRINT(LOGWARN, "id:", base->m_id, "Received a bad message start");
                 break;
             } else if ((msgsize != 0u) && fComplete) {
                 msgs.emplace_back(msgsize, 0);
@@ -380,28 +391,27 @@ void ConnectionBase::read_cb_message(bufferevent* bev, void* ctx)
             }
         } while (fComplete);
 
-        if ((msgsize != 0u) && !fBadMsgStart && !fTooBig) {
+        if ((msgsize != 0u) && !fBadMsgStart) {
             size_t buflen = evbuffer_get_length(input);
-            if (buflen < msgsize + netconfig.header_size)
+            if (buflen < msgsize + netconfig.header_size && !fTooBig)
                 evbuffer_expand(input, msgsize + netconfig.header_size - buflen);
-            bufferevent_setwatermark(bev, EV_READ, msgsize, 0);
+            bufferevent_setwatermark(bev, EV_READ, msgsize, msgsize + netconfig.message_max_size);
             DEBUG_PRINT(LOGVERBOSE, "id:", base->m_id, "watermark set to", msgsize);
         } else if (!fBadMsgStart && !fTooBig) {
             size_t watermark = netconfig.header_msg_size_offset + netconfig.header_msg_size_size;
-            bufferevent_setwatermark(bev, EV_READ, watermark, 0);
+            bufferevent_setwatermark(bev, EV_READ, watermark, netconfig.message_max_size);
             DEBUG_PRINT(LOGVERBOSE, "id:", base->m_id, "watermark set to", watermark);
         }
     }
 
-    if (fBadMsgStart) {
-        DEBUG_PRINT(LOGWARN, "id:", base->m_id, "Received a bad message start");
-        base->DisconnectInt(0);
-    } else if (fTooBig) {
-        DEBUG_PRINT(LOGWARN, "id:", base->m_id, "Received an oversized message");
-        base->DisconnectInt(0);
-    } else if (totalsize != 0u) {
+    if (totalsize != 0u) {
         DEBUG_PRINT(LOGINFO, "id:", base->m_id, "Received", msgs.size(), "messages");
         base->m_handler.OnReceiveMessages(base->m_id, std::move(msgs), totalsize);
+    }
+
+    if (fTooBig || fBadMsgStart) {
+        base->m_handler.OnMalformedMessage(base->m_id);
+        base->DisconnectInt(0);
     }
 }
 

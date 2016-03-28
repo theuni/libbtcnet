@@ -80,6 +80,7 @@ private:
     void OnListenFailure(ConnID id, const CConnection& bind);
     void OnDisconnected(ConnID id, bool reconnect);
     void OnPingTimeout(ConnID id);
+    void OnMalformedMessage(ConnID id);
 
     void RequestOutgoingInt();
     void ShutdownInt();
