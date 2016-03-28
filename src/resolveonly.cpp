@@ -13,7 +13,7 @@
 #endif
 
 CResolveOnly::CResolveOnly(CConnectionHandlerInt& handler, CConnection&& conn, ConnID id)
-    : m_id(id), m_connection(std::move(conn)), m_retries(m_connection.GetOptions().nRetries), m_handler(handler), m_retry_event(handler.GetEventBase(), 0, std::bind(&CResolveOnly::Resolve, this)), m_retry_timeout({m_connection.GetOptions().nRetryInterval, 0})
+    : m_id(id), m_connection(std::move(conn)), m_retries(m_connection.GetOptions().nRetries), m_handler(handler), m_retry_event(handler.GetEventBase(), -1, 0, std::bind(&CResolveOnly::Resolve, this)), m_retry_timeout({m_connection.GetOptions().nRetryInterval, 0})
 {
 }
 

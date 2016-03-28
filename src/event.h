@@ -15,7 +15,7 @@ struct event_base;
 class CEvent
 {
 public:
-    CEvent(const event_type<event_base>& base, short flags, std::function<void()>&& func);
+    CEvent(const event_type<event_base>& base, evutil_socket_t sock, short flags, std::function<void()>&& func);
     CEvent();
     ~CEvent();
 
@@ -25,7 +25,7 @@ public:
     void add(const timeval& tv);
     void priority_set(int priority);
 
-    void reset(const event_type<event_base>& base, short flags, std::function<void()>&& func);
+    void reset(const event_type<event_base>& base, evutil_socket_t sock, short flags, std::function<void()>&& func);
     operator bool() const;
 
 private:

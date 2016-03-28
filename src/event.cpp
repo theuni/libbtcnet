@@ -13,9 +13,9 @@ CEvent::CEvent() : m_event(nullptr)
 {
 }
 
-CEvent::CEvent(const event_type<event_base>& base, short flags, std::function<void()>&& func)
+CEvent::CEvent(const event_type<event_base>& base, evutil_socket_t sock, short flags, std::function<void()>&& func)
 {
-    reset(base, flags, std::move(func));
+    reset(base, sock, flags, std::move(func));
 }
 
 CEvent::~CEvent()
@@ -33,11 +33,11 @@ void CEvent::free()
     m_event.free();
 }
 
-void CEvent::reset(const event_type<event_base>& base, short flags, std::function<void()>&& func)
+void CEvent::reset(const event_type<event_base>& base, evutil_socket_t sock, short flags, std::function<void()>&& func)
 {
     assert(base);
     m_func = std::move(func);
-    m_event = event_type<event>(event_new(base, -1, flags, callback, this));
+    m_event = event_type<event>(event_new(base, sock, flags, callback, this));
     assert(m_event);
 }
 

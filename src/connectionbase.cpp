@@ -33,7 +33,7 @@ private:
 };
 
 ConnectionBase::ConnectionBase(CConnectionHandlerInt& handler, CConnection&& conn, ConnID id)
-    : m_handler(handler), m_event_base(handler.GetEventBase()), m_connection(std::move(conn)), m_id(id), m_reconnect_func(m_event_base, 0, std::bind(&ConnectionBase::Connect, this)), m_disconnect_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectInt, this, 0)), m_disconnect_wait_func(m_event_base, 0, std::bind(&ConnectionBase::DisconnectWhenFinishedInt, this)), m_check_write_buffer_func(m_event_base, 0, std::bind(&ConnectionBase::CheckWriteBufferInt, this)), m_ping_timeout_func(m_event_base, 0, std::bind(&ConnectionBase::PingTimeoutInt, this)), read_cb_ptr(nullptr)
+    : m_handler(handler), m_event_base(handler.GetEventBase()), m_connection(std::move(conn)), m_id(id), m_reconnect_func(m_event_base, -1, 0, std::bind(&ConnectionBase::Connect, this)), m_disconnect_func(m_event_base, -1, 0, std::bind(&ConnectionBase::DisconnectInt, this, 0)), m_disconnect_wait_func(m_event_base, -1, 0, std::bind(&ConnectionBase::DisconnectWhenFinishedInt, this)), m_check_write_buffer_func(m_event_base, -1, 0, std::bind(&ConnectionBase::CheckWriteBufferInt, this)), m_ping_timeout_func(m_event_base, -1, 0, std::bind(&ConnectionBase::PingTimeoutInt, this)), read_cb_ptr(nullptr)
 {
 }
 

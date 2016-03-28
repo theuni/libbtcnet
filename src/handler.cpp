@@ -80,8 +80,8 @@ void CConnectionHandlerInt::Start(int outgoing_limit)
 
     event_base_priority_init(m_event_base, 3);
 
-    m_request_event.reset(m_event_base, EV_PERSIST, std::bind(&CConnectionHandlerInt::RequestOutgoingInt, this));
-    m_shutdown_event.reset(m_event_base, 0, std::bind(&CConnectionHandlerInt::ShutdownInt, this));
+    m_request_event.reset(m_event_base, -1, EV_PERSIST, std::bind(&CConnectionHandlerInt::RequestOutgoingInt, this));
+    m_shutdown_event.reset(m_event_base, -1, 0, std::bind(&CConnectionHandlerInt::ShutdownInt, this));
 
     m_shutdown_event.priority_set(0);
 
