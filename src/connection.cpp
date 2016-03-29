@@ -8,6 +8,7 @@
 
 #include <string.h>
 #include <assert.h>
+#include <array>
 #include <string>
 
 
@@ -135,33 +136,33 @@ std::string CConnectionBase::GetHost() const
 {
     if (isDns)
         return host;
+
+    std::string rethost;
     if (!addr.empty()) {
-        char hostbuf[NI_MAXHOST] = {};
+        std::array<char, NI_MAXHOST> hostbuf{};
         sockaddr_storage addr_stor;
         memset(&addr_stor, 0, sizeof(addr_stor));
         memcpy(&addr_stor, addr.data(), addr.size());
-        if (getnameinfo(reinterpret_cast<sockaddr*>(&addr_stor), addr.size(), hostbuf, sizeof(hostbuf), nullptr, 0, NI_NUMERICHOST) == 0)
-            return std::string(hostbuf);
+        if (getnameinfo(reinterpret_cast<sockaddr*>(&addr_stor), addr.size(), hostbuf.data(), hostbuf.size(), nullptr, 0, NI_NUMERICHOST) == 0)
+            rethost.assign(hostbuf.data());
     }
-    return std::string();
+    return rethost;
 }
 
 unsigned short CConnectionBase::GetPort() const
 {
     if (isDns)
         return port;
-    if (addr.empty())
-        return 0;
 
-    unsigned short ret = 0;
-    sockaddr_storage storage;
-    memcpy(&storage, &addr[0], addr.size());
-    sockaddr* saddr = reinterpret_cast<sockaddr*>(&storage);
-    if (saddr->sa_family == AF_INET)
-        ret = reinterpret_cast<sockaddr_in*>(&storage)->sin_port;
-    else if (saddr->sa_family == AF_INET6)
-        ret = reinterpret_cast<sockaddr_in6*>(&storage)->sin6_port;
-    return ntohs(ret);
+    if (!addr.empty()) {
+        std::array<char, NI_MAXSERV> servbuf{};
+        sockaddr_storage addr_stor;
+        memset(&addr_stor, 0, sizeof(addr_stor));
+        memcpy(&addr_stor, addr.data(), addr.size());
+        if (getnameinfo(reinterpret_cast<sockaddr*>(&addr_stor), addr.size(), nullptr, 0, servbuf.data(), servbuf.size(), NI_NUMERICSERV) == 0)
+            return std::atoi(servbuf.data());
+    }
+    return 0;
 }
 
 bool CConnectionBase::IsSet() const
@@ -171,7 +172,24 @@ bool CConnectionBase::IsSet() const
 
 std::string CConnectionBase::ToString() const
 {
-    return GetHost();
+    if (isDns)
+        return host + ":" + std::to_string(port);
+    std::string ret;
+    if (!addr.empty()) {
+        std::array<char, NI_MAXHOST> hostbuf{};
+        std::array<char, NI_MAXSERV> servbuf{};
+        sockaddr_storage addr_stor;
+        memset(&addr_stor, 0, sizeof(addr_stor));
+        memcpy(&addr_stor, addr.data(), addr.size());
+        if (getnameinfo(reinterpret_cast<sockaddr*>(&addr_stor), addr.size(), hostbuf.data(), hostbuf.size(), servbuf.data(), servbuf.size(), NI_NUMERICHOST | NI_NUMERICSERV) == 0) {
+            size_t len = strlen(hostbuf.data()) + strlen(servbuf.data()) + 1;
+            ret.reserve(len);
+            ret.assign(hostbuf.data());
+            ret.push_back(':');
+            ret.append(servbuf.data());
+        }
+    }
+    return ret;
 }
 
 CConnectionOptions::CConnectionOptions()
