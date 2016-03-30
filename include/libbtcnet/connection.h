@@ -26,6 +26,7 @@ public:
     unsigned short GetPort() const;
     bool IsSet() const;
     std::string ToString() const;
+    const std::string& GetConnectionString() const;
 
 private:
     std::string host;
@@ -33,6 +34,7 @@ private:
     bool isDns;
     bool isSet;
     std::vector<unsigned char> addr;
+    std::string connection_string;
 };
 
 class CProxyAuth

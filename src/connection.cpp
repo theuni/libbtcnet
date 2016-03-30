@@ -70,7 +70,7 @@ CConnectionBase::CConnectionBase(const sockaddr* addrIn, int addrlen)
 }
 
 CConnectionBase::CConnectionBase(std::string hostIn, unsigned short portIn)
-    : host(std::move(hostIn)), port(portIn), isDns(true), isSet(true)
+    : host(hostIn), port(portIn), isDns(true), isSet(true), connection_string(std::move(hostIn))
 {
     sockaddr_storage saddr;
     int addrsize = sizeof(saddr);
@@ -131,6 +131,11 @@ bool CConnectionBase::GetSockAddr(sockaddr* paddr, int* addrlen) const
         *addrlen = addr.size();
     }
     return false;
+}
+
+const std::string& CConnectionBase::GetConnectionString() const
+{
+    return connection_string;
 }
 
 std::string CConnectionBase::GetHost() const
