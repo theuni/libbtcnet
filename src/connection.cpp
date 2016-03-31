@@ -203,11 +203,21 @@ std::string CConnectionBase::ToString() const
         memset(&addr_stor, 0, sizeof(addr_stor));
         memcpy(&addr_stor, addr.data(), addr.size());
         if (getnameinfo(reinterpret_cast<sockaddr*>(&addr_stor), addr.size(), hostbuf.data(), hostbuf.size(), servbuf.data(), servbuf.size(), NI_NUMERICHOST | NI_NUMERICSERV) == 0) {
-            size_t len = strlen(hostbuf.data()) + strlen(servbuf.data()) + 1;
-            ret.reserve(len);
-            ret.assign(hostbuf.data());
-            ret.push_back(':');
-            ret.append(servbuf.data());
+            if (addr_stor.ss_family == AF_INET6) {
+                size_t len = strlen(hostbuf.data()) + strlen(servbuf.data()) + 3;
+                ret.reserve(len);
+                ret.push_back('[');
+                ret.append(hostbuf.data());
+                ret.append("]:");
+                ret.append(servbuf.data());
+            } else if (addr_stor.ss_family == AF_INET) {
+                size_t len = strlen(hostbuf.data()) + strlen(servbuf.data()) + 1;
+                ret.reserve(len);
+                ret.assign(hostbuf.data());
+                ret.push_back(':');
+                ret.append(servbuf.data());
+            } else
+                ret.assign(hostbuf.data());
         }
     }
     return ret;
