@@ -41,7 +41,10 @@ void CProxyConn::Connect()
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
     proxy.GetSockAddr(addr, &addrlen);
 
-    BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, addr, addrlen, connTimeout);
+    if (m_connection.CanConnectProxy())
+        BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, addr, addrlen, connTimeout);
+    else
+        OnConnectionFailure(ConnectionFailureType::PROXY, 0, m_connection, false);
 }
 
 void CProxyConn::OnConnectSuccess(event_type<bufferevent>&& bev)

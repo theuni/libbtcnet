@@ -30,13 +30,10 @@ void CResolveOnly::Resolve()
     hint.ai_flags = EVUTIL_AI_NUMERICSERV;
     hint.ai_flags |= opts.doResolve == CConnectionOptions::NO_RESOLVE ? EVUTIL_AI_NUMERICHOST : EVUTIL_AI_ADDRCONFIG;
 
-    if (opts.resolveFamily == CConnectionOptions::IPV4)
-        hint.ai_family = AF_INET;
-    else if (opts.resolveFamily == CConnectionOptions::IPV6)
-        hint.ai_family = AF_INET6;
+    if (m_connection.CanResolve() && SetResolveFamily(opts.nFamily, &hint))
+        m_request = CDNSResolve::Resolve(m_handler.GetDNSBase(), m_connection.GetHost().c_str(), std::to_string(m_connection.GetPort()).c_str(), &hint);
     else
-        hint.ai_family = AF_UNSPEC;
-    m_request = CDNSResolve::Resolve(m_handler.GetDNSBase(), m_connection.GetHost().c_str(), std::to_string(m_connection.GetPort()).c_str(), &hint);
+        OnResolveFailure(0);
 }
 
 void CResolveOnly::OnResolveFailure(int error)

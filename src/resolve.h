@@ -52,6 +52,8 @@ protected:
     virtual void OnResolveFailure(int result) = 0;
     event_type<evdns_getaddrinfo_request> Resolve(const event_type<evdns_base>& dns_base, const char* host, const char* port, const evutil_addrinfo* hints);
 
+    static bool SetResolveFamily(int family, evutil_addrinfo* hint);
+
 private:
     static void dns_callback(int result, evutil_addrinfo* ai, void* ctx);
 };

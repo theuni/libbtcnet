@@ -52,14 +52,10 @@ void CDNSConnection::DoResolve()
     hint.ai_flags = EVUTIL_AI_NUMERICSERV;
     hint.ai_flags |= opts.doResolve == CConnectionOptions::NO_RESOLVE ? EVUTIL_AI_NUMERICHOST : EVUTIL_AI_ADDRCONFIG;
 
-    if (opts.resolveFamily == CConnectionOptions::IPV4)
-        hint.ai_family = AF_INET;
-    else if (opts.resolveFamily == CConnectionOptions::IPV6)
-        hint.ai_family = AF_INET6;
+    if (m_connection.CanResolve() && SetResolveFamily(opts.nFamily, &hint))
+        m_request = Resolve(m_dns_base, m_connection.GetHost().c_str(), std::to_string(m_connection.GetPort()).c_str(), &hint);
     else
-        hint.ai_family = AF_UNSPEC;
-
-    m_request = Resolve(m_dns_base, m_connection.GetHost().c_str(), std::to_string(m_connection.GetPort()).c_str(), &hint);
+        OnResolveFailure(0);
 }
 
 void CDNSConnection::OnResolveFailure(int error)
@@ -112,11 +108,14 @@ void CDNSConnection::ConnectResolved()
     assert(m_iter != m_resolved.end());
     assert(!m_resolved.empty());
 
+    const CConnectionOptions& opts = m_connection.GetOptions();
     timeval connTimeout;
-    connTimeout.tv_sec = m_connection.GetOptions().nConnTimeout;
+    connTimeout.tv_sec = opts.nConnTimeout;
     connTimeout.tv_usec = 0;
-
-    BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, m_iter->ai_addr, m_iter->ai_addrlen, connTimeout);
+    if (CConnection::CanConnectDirect(m_iter->ai_addr, opts.nFamily))
+        BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, m_iter->ai_addr, m_iter->ai_addrlen, connTimeout);
+    else
+        OnConnectFailure(0, 0);
 }
 
 void CDNSConnection::Cancel()

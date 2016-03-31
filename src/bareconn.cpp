@@ -4,13 +4,13 @@
 
 #include "bareconn.h"
 #include "eventtypes.h"
+#include "libbtcnet/connection.h"
 #include <assert.h>
 #include <errno.h>
 #include <event2/event.h>
 #include <event2/bufferevent.h>
 #include <event2/util.h>
 #include <functional>
-
 CBareConnection::~CBareConnection() = default;
 
 void CBareConnection::conn_event(bufferevent* bev, short event, void* ctx)

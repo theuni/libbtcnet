@@ -20,6 +20,7 @@ protected:
     CConnectionBase();
 
 public:
+    bool IsOnion() const;
     bool IsDNS() const;
     bool GetSockAddr(sockaddr* paddr, int* addrlen) const;
     std::string GetHost() const;
@@ -32,6 +33,7 @@ private:
     std::string host;
     unsigned short port;
     bool isDns;
+    bool isOnion;
     bool isSet;
     std::vector<unsigned char> addr;
     std::string connection_string;
@@ -84,11 +86,13 @@ class CConnectionOptions
 {
 public:
     enum Family {
-        UNSPEC = 1 << 0,
+        NONE = 1 << 0,
         IPV4 = 1 << 1,
         IPV6 = 1 << 2,
-        ONION = 1 << 3,
-        LOCAL = 1 << 4
+        UNIX = 1 << 3,
+        ONION_PROXY = 1 << 4,
+        IP = IPV4 | IPV6,
+        ANY = IP | UNIX | ONION_PROXY
     };
 
     enum Resolve {
@@ -110,7 +114,7 @@ public:
     int nMaxSendBuffer;
     int nRetryInterval;
     int nMaxLookupResults;
-    Family resolveFamily;
+    Family nFamily;
 };
 
 class CConnection : public CConnectionBase
@@ -124,7 +128,10 @@ public:
     const CProxy& GetProxy() const;
     const CConnectionOptions& GetOptions() const;
     const CNetworkConfig& GetNetConfig() const;
-
+    bool CanConnectProxy() const;
+    bool CanConnectDirect() const;
+    bool CanResolve() const;
+    static bool CanConnectDirect(sockaddr* sock, CConnectionOptions::Family family);
 private:
     CProxy proxy;
     CConnectionOptions opts;

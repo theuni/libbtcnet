@@ -41,7 +41,10 @@ void CDirectConnection::Connect()
     sockaddr* addr = reinterpret_cast<sockaddr*>(&addr_storage);
     m_connection.GetSockAddr(addr, &addrlen);
 
-    BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, addr, addrlen, connTimeout);
+    if (m_connection.CanConnectDirect())
+        BareConnect(m_event_base, m_handler.GetBevOpts(), BAD_SOCKET, addr, addrlen, connTimeout);
+    else
+        OnConnectionFailure(ConnectionFailureType::CONNECT, 0, m_connection, false);
 }
 
 void CDirectConnection::OnConnectSuccess(event_type<bufferevent>&& bev)

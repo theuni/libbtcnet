@@ -4,6 +4,7 @@
 
 #include "resolve.h"
 #include "eventtypes.h"
+#include "libbtcnet/connection.h"
 
 #include <event2/dns.h>
 
@@ -103,6 +104,19 @@ CDNSResponse& CDNSResponse::operator=(CDNSResponse&& rhs) noexcept
     m_ai = rhs.m_ai;
     rhs.m_ai = nullptr;
     return *this;
+}
+
+bool CDNSResolve::SetResolveFamily(int family, evutil_addrinfo* hint)
+{
+    if ((family & CConnectionOptions::IP) == CConnectionOptions::IP)
+        hint->ai_family = AF_UNSPEC;
+    else if ((family & CConnectionOptions::IPV4) == CConnectionOptions::IPV4)
+        hint->ai_family = AF_INET;
+    else if ((family & CConnectionOptions::IPV6) == CConnectionOptions::IPV6)
+        hint->ai_family = AF_INET6;
+    else
+        return false;
+    return true;
 }
 
 event_type<evdns_getaddrinfo_request> CDNSResolve::Resolve(const event_type<evdns_base>& dns_base, const char* host, const char* port, const evutil_addrinfo* hints)

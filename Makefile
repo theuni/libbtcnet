@@ -16,6 +16,7 @@ LIB_OBJS += src/listener.o
 LIB_OBJS += src/resolveonly.o
 LIB_OBJS += src/incomingconn.o
 LIB_OBJS += src/event.o
+LIB_OBJS += src/base32.o
 
 MULTINET_OBJS  = tests/multinet.o
 

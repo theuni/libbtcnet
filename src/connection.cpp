@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "libbtcnet/connection.h"
-
+#include "base32.h"
 #include <event2/util.h>
 
 #include <string.h>
@@ -65,12 +65,12 @@ CProxy::Type CProxy::GetType() const
 }
 
 CConnectionBase::CConnectionBase(const sockaddr* addrIn, int addrlen)
-    : port(0), isDns(false), isSet(true), addr(reinterpret_cast<const unsigned char*>(addrIn), reinterpret_cast<const unsigned char*>(addrIn) + addrlen)
+    : port(0), isDns(false), isOnion(false), isSet(true), addr(reinterpret_cast<const unsigned char*>(addrIn), reinterpret_cast<const unsigned char*>(addrIn) + addrlen)
 {
 }
 
 CConnectionBase::CConnectionBase(std::string hostIn, unsigned short portIn)
-    : host(hostIn), port(portIn), isDns(true), isSet(true), connection_string(std::move(hostIn))
+    : host(hostIn), port(portIn), isDns(true), isOnion(false), isSet(true), connection_string(std::move(hostIn))
 {
     sockaddr_storage saddr;
     int addrsize = sizeof(saddr);
@@ -111,11 +111,20 @@ CConnectionBase::CConnectionBase(std::string hostIn, unsigned short portIn)
             }
             host = host.substr(0, colon);
         }
+
+        if (host.size() > 6 && host.substr(host.size() - 6, 6) == ".onion") {
+            bool invalid = false;
+            DecodeBase32(host.substr(0, host.size() - 6).c_str(), &invalid);
+            if (!invalid) {
+                isOnion = true;
+                isDns = false;
+            }
+        }
     }
 }
 
 CConnectionBase::CConnectionBase()
-    : port(0), isDns(false), isSet(false)
+    : port(0), isDns(false), isOnion(false), isSet(false)
 {
 }
 
@@ -124,11 +133,17 @@ bool CConnectionBase::IsDNS() const
     return isDns;
 }
 
+bool CConnectionBase::IsOnion() const
+{
+    return isOnion;
+}
+
 bool CConnectionBase::GetSockAddr(sockaddr* paddr, int* addrlen) const
 {
     if (!addr.empty() && (addrlen != nullptr) && static_cast<size_t>(*addrlen) >= addr.size()) {
         memcpy(paddr, &addr[0], addr.size());
         *addrlen = addr.size();
+        return true;
     }
     return false;
 }
@@ -140,7 +155,7 @@ const std::string& CConnectionBase::GetConnectionString() const
 
 std::string CConnectionBase::GetHost() const
 {
-    if (isDns)
+    if (isDns || isOnion)
         return host;
 
     std::string rethost;
@@ -157,7 +172,7 @@ std::string CConnectionBase::GetHost() const
 
 unsigned short CConnectionBase::GetPort() const
 {
-    if (isDns)
+    if (isDns || isOnion)
         return port;
 
     if (!addr.empty()) {
@@ -178,7 +193,7 @@ bool CConnectionBase::IsSet() const
 
 std::string CConnectionBase::ToString() const
 {
-    if (isDns)
+    if (isDns || isOnion)
         return host + ":" + std::to_string(port);
     std::string ret;
     if (!addr.empty()) {
@@ -199,7 +214,7 @@ std::string CConnectionBase::ToString() const
 }
 
 CConnectionOptions::CConnectionOptions()
-    : fWhitelisted(false), fOneShot(false), fPersistent(false), doResolve(NO_RESOLVE), nRetries(0), nConnTimeout(5), nRecvTimeout(60 * 20), nSendTimeout(60 * 20), nInitialTimeout(60), nMaxSendBuffer(5000000), nRetryInterval(1), nMaxLookupResults(0), resolveFamily(UNSPEC)
+    : fWhitelisted(false), fOneShot(false), fPersistent(false), doResolve(NO_RESOLVE), nRetries(0), nConnTimeout(5), nRecvTimeout(60 * 20), nSendTimeout(60 * 20), nInitialTimeout(60), nMaxSendBuffer(5000000), nRetryInterval(1), nMaxLookupResults(0), nFamily(NONE)
 {
 }
 
@@ -244,4 +259,67 @@ const CConnectionOptions& CConnection::GetOptions() const
 const CNetworkConfig& CConnection::GetNetConfig() const
 {
     return netConfig;
+}
+
+bool CConnection::CanConnectDirect(sockaddr* sock, CConnectionOptions::Family family)
+{
+    assert(sock != nullptr);
+#ifndef _WIN32
+    if(sock->sa_family == AF_UNIX && (family & CConnectionOptions::UNIX) == CConnectionOptions::UNIX)
+        return true;
+#endif
+    return (sock->sa_family == AF_INET && (family & CConnectionOptions::IPV4) == CConnectionOptions::IPV4) ||
+           (sock->sa_family == AF_INET6 && (family & CConnectionOptions::IPV6) == CConnectionOptions::IPV6);
+}
+
+bool CConnection::CanConnectDirect() const
+{
+    if (!IsSet())
+        return false;
+    if (IsDNS())
+        return false;
+    if (IsOnion())
+        return false;
+
+    sockaddr_storage addr_stor;
+    int socksize = sizeof(addr_stor);
+    memset(&addr_stor, 0, socksize);
+    sockaddr* sock = reinterpret_cast<sockaddr*>(&addr_stor);
+
+    if (!GetSockAddr(sock, &socksize))
+        return false;
+    return CanConnectDirect(sock, opts.nFamily);
+}
+
+bool CConnection::CanConnectProxy() const
+{
+    if (!IsSet())
+        return false;
+    if (!proxy.IsSet())
+        return false;
+    if (IsDNS())
+        return opts.doResolve == CConnectionOptions::RESOLVE_CONNECT;
+    if (IsOnion())
+        return ((opts.nFamily & CConnectionOptions::ONION_PROXY) == CConnectionOptions::ONION_PROXY);
+
+    sockaddr_storage addr_stor;
+    int socksize = sizeof(addr_stor);
+    memset(&addr_stor, 0, socksize);
+    sockaddr* sock = reinterpret_cast<sockaddr*>(&addr_stor);
+
+    if (!GetSockAddr(sock, &socksize))
+        return false;
+    return CanConnectDirect(sock, opts.nFamily);
+}
+
+bool CConnection::CanResolve() const
+{
+    if (!IsSet())
+        return false;
+    if (!IsDNS())
+        return false;
+    if (opts.doResolve == CConnectionOptions::NO_RESOLVE)
+        return false;
+    return ((opts.nFamily & CConnectionOptions::IPV4) == CConnectionOptions::IPV4) ||
+           ((opts.nFamily & CConnectionOptions::IPV6) == CConnectionOptions::IPV6);
 }

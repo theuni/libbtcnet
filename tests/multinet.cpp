@@ -69,6 +69,7 @@ protected:
         myopts.nRetries = 0;
         myopts.doResolve = CConnectionOptions::RESOLVE_CONNECT;
         myopts.nConnTimeout = 1;
+        myopts.nFamily = CConnectionOptions::ANY;
 
         m_connections.emplace_back(myopts, mainnet_config, "seed.bitcoin.sipa.be", 8333);
         m_connections.emplace_back(myopts, testnet_config, "testnet-seed.bitcoin.petertodd.org", 8333);
